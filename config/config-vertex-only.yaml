@@ -1,0 +1,87 @@
+# TITAN-4-DESIGN Dataset Factory Configuration (Vertex-only)
+#
+# Use this when OpenRouter credits are unavailable and you want to run everything on Vertex/Gemini.
+# Notes:
+# - Patcher uses Vertex DeepSeek by default (text-only). No OpenRouter required.
+# - Vision judge uses Gemini provider (API key mode via GEMINI_API_KEY/GOOGLE_API_KEY, or ADC via GOOGLE_CLOUD_PROJECT).
+#
+# Usage:
+#   export TITAN_CONFIG_PATH=config/config-vertex-only.yaml
+#   make smoke
+#
+
+models:
+  # Stage 1: Planner (generates UI_SPEC)
+  planner:
+    provider: vertex
+    model: deepseek-ai/deepseek-v3.2-maas
+    publishable: true
+    max_tokens: 2000
+    temperature: 0.7
+
+  # Stage 2: UI Generators (generate code candidates)
+  ui_generators:
+    - provider: vertex
+      model: moonshotai/kimi-k2-thinking-maas
+      publishable: true
+      variants: 2
+      max_tokens: 12000
+      temperature: 0.8
+    - provider: vertex
+      model: minimaxai/minimax-m2-maas
+      publishable: true
+      variants: 2
+      max_tokens: 12000
+      temperature: 0.8
+
+  # Stage 3: Patcher/Fixer (fixes build errors)
+  # Vertex DeepSeek works well for patching and avoids OpenRouter dependency.
+  patcher:
+    provider: vertex
+    model: deepseek-ai/deepseek-v3.2-maas
+    publishable: true
+    max_tokens: 3000
+    temperature: 0.2
+
+  # Vision Judge (scores screenshots - NOT used for training)
+  # Uses Gemini native API for multimodal vision capabilities.
+  vision_judge:
+    provider: gemini
+    model: gemini-3-pro-preview
+    publishable: false
+    max_tokens: 4000
+    temperature: 0.1
+
+pipeline:
+  vision_score_threshold: 8.0
+  max_fix_rounds: 2
+  polish_loop_enabled: true
+  tasks_per_niche: 7
+  total_niches: 100
+  model_timeout_ms: 120000
+  build_timeout_ms: 240000
+  render_timeout_ms: 90000
+
+budget:
+  concurrency_vertex: 5
+  concurrency_openrouter: 10
+  requests_per_min_vertex: 60
+  requests_per_min_openrouter: 100
+  max_total_tasks: null
+  stop_after_usd: null
+
+export:
+  holdout_niches: 12
+  validation_split: 0.08
+  holdout_niche_ids: []
+
+gcs:
+  bucket: null
+  prefix: titan-factory-outputs
+  upload_interval_tasks: 50
+
+vertex:
+  endpoint_template: "https://{region}-aiplatform.googleapis.com/v1/projects/{project}/locations/{region}/endpoints/openapi/chat/completions"
+
+openrouter:
+  base_url: "https://openrouter.ai/api/v1/chat/completions"

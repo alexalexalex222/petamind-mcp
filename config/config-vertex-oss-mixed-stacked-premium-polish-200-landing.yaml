@@ -1,0 +1,127 @@
+# TITAN-4-DESIGN Dataset Factory Configuration (200 landing tasks, stacked mega prompt + premium polish)
+#
+# Goal: generate 200 landing-page tasks (≈200 * candidates_per_task websites) with:
+# - Skip numeric scoring/winners
+# - Discard ONLY clearly broken renders (vision broken gate)
+# - Optional premium labeling + single polish pass on confidently non-premium renders
+#
+# Usage:
+#   export GOOGLE_CLOUD_PROJECT=<billed-project>
+#   ./.venv/bin/titan-factory run --public-only --run-id oss_stacked_premium_polish_200_landing \
+#     --config config/config-vertex-oss-mixed-stacked-premium-polish-200-landing.yaml
+#
+# Preview:
+#   ./.venv/bin/titan-factory gallery --run-id oss_stacked_premium_polish_200_landing
+#   python -m http.server 3001 --directory out/oss_stacked_premium_polish_200_landing
+#   # open http://localhost:3001/gallery/index.html
+
+models:
+  planner:
+    provider: vertex
+    model: deepseek-ai/deepseek-v3.2-maas
+    publishable: true
+    max_tokens: 2000
+    temperature: 0.7
+
+  ui_generators:
+    - provider: vertex
+      model: moonshotai/kimi-k2-thinking-maas
+      publishable: true
+      variants: 1
+      max_tokens: 12000
+      temperature: 0.85
+    - provider: vertex
+      model: minimaxai/minimax-m2-maas
+      publishable: true
+      variants: 1
+      max_tokens: 12000
+      temperature: 0.85
+
+  # Build-fix patcher
+  patcher:
+    provider: vertex
+    model: deepseek-ai/deepseek-v3.2-maas
+    publishable: true
+    max_tokens: 6000
+    temperature: 0.2
+
+  # Quality polisher (optional)
+  polisher:
+    provider: vertex
+    model: deepseek-ai/deepseek-v3.2-maas
+    publishable: true
+    max_tokens: 9000
+    temperature: 0.55
+
+  # Vision judge for broken + premium gates
+  vision_judge:
+    provider: gemini
+    model: gemini-3-flash-preview
+    publishable: false
+    max_tokens: 900
+    temperature: 0.0
+
+pipeline:
+  skip_judge: true
+  generate_edit_tasks: false
+
+  # Task prompts (planner input)
+  task_prompt_pack: mixed
+
+  # UIGEN mega prompt stack
+  uigen_prompt_variants:
+    - id: stacked_all
+      input_mode: both
+      parts:
+        - source: builtin
+        - source: file
+          path: prompts/titan_ui_system_long.txt
+        - source: inline
+          text: |
+            GLOBAL OVERRIDES (APPLY EVEN IF OTHER PROMPTS CONFLICT):
+            - No emojis in any text. If an icon is needed, use simple inline SVG (keep icons minimal).
+            - Output must be STRICT: <think>...</think> followed by ONE valid JSON object.
+            - Quality bar: ship-ready first pass. Avoid “flat/boring/basic demo” outputs.
+
+  # Broken-only gate (conservative)
+  broken_vision_gate_enabled: true
+  broken_vision_gate_min_confidence: 0.90
+
+  # Premium labeling + polish (does NOT discard for aesthetics)
+  premium_vision_gate_enabled: true
+  premium_vision_gate_min_confidence: 0.75
+
+  polish_loop_enabled: true
+  polish_max_rounds: 1
+  polish_max_candidates_per_task: 1
+
+  max_fix_rounds: 1
+
+  # Exactly 200 landing tasks: 2 tasks per niche * 100 niches
+  page_type_filter: ["landing"]
+  tasks_per_niche: 2
+  total_niches: 100
+
+  shuffle_tasks: true
+  task_shuffle_seed: 1337
+
+budget:
+  task_concurrency: 5
+  concurrency_vertex: 10
+  concurrency_gemini: 2
+  concurrency_build: 4
+  concurrency_render: 1
+  requests_per_min_vertex: 60
+
+  # Run all 200 tasks in tasks.jsonl (2*100), no need to pass --max-tasks
+  max_total_tasks: null
+  stop_after_usd: null
+
+export:
+  holdout_niches: 0
+  validation_split: 0.0
+  holdout_niche_ids: []
+
+vertex:
+  endpoint_template: "https://{region}-aiplatform.googleapis.com/v1/projects/{project}/locations/{region}/endpoints/openapi/chat/completions"
+

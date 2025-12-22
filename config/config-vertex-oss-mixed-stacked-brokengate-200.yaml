@@ -1,0 +1,115 @@
+# TITAN-4-DESIGN Dataset Factory Configuration (OSS, mixed tasks, STACKED prompt)
+#
+# This is the "max throughput" version of the multiprompt workflow:
+# - Uses ONE stacked system prompt (builtin + TITAN + overrides) per model call.
+# - Accepts anything that builds + renders (no winners).
+# - Optionally discards only clearly broken renders via Gemini broken gate.
+#
+# Usage:
+#   export GOOGLE_CLOUD_PROJECT=<billed-project>
+#   ./.venv/bin/titan-factory run --public-only --max-tasks 200 \
+#     --run-id oss_mixed_stacked_200 \
+#     --config config/config-vertex-oss-mixed-stacked-brokengate-200.yaml
+
+models:
+  planner:
+    provider: vertex
+    model: deepseek-ai/deepseek-v3.2-maas
+    publishable: true
+    max_tokens: 2000
+    temperature: 0.7
+
+  ui_generators:
+    - provider: vertex
+      model: moonshotai/kimi-k2-thinking-maas
+      publishable: true
+      variants: 2
+      max_tokens: 12000
+      temperature: 0.8
+    - provider: vertex
+      model: minimaxai/minimax-m2-maas
+      publishable: true
+      variants: 2
+      max_tokens: 12000
+      temperature: 0.8
+
+  patcher:
+    provider: vertex
+    model: deepseek-ai/deepseek-v3.2-maas
+    publishable: true
+    max_tokens: 6000
+    temperature: 0.2
+
+  vision_judge:
+    provider: gemini
+    model: gemini-3-flash-preview
+    publishable: false
+    max_tokens: 800
+    temperature: 0.0
+
+pipeline:
+  skip_judge: true
+  generate_edit_tasks: false
+
+  task_prompt_pack: mixed
+
+  # Single stacked system prompt = "all prompts at once"
+  uigen_prompt_variants:
+    - id: stacked_all
+      input_mode: both
+      parts:
+        - source: builtin
+        - source: file
+          path: prompts/titan_ui_system_long.txt
+        - source: inline
+          text: |
+            GLOBAL OVERRIDES (APPLY EVEN IF OTHER PROMPTS CONFLICT):
+            - No emojis in any text. If an icon is needed, use simple inline SVG (keep icons minimal).
+            - Output must be STRICT: <think>...</think> followed by ONE valid JSON object.
+
+  broken_vision_gate_enabled: true
+  broken_vision_gate_min_confidence: 0.85
+
+  max_fix_rounds: 1
+  polish_loop_enabled: false
+  vision_score_threshold: 0.0
+
+  page_type_filter: ["landing"]
+  tasks_per_niche: 2
+  total_niches: 100
+
+  shuffle_tasks: true
+  task_shuffle_seed: 1337
+
+  model_timeout_ms: 120000
+  build_timeout_ms: 240000
+  render_timeout_ms: 90000
+
+budget:
+  task_concurrency: 5
+  concurrency_vertex: 20
+  concurrency_openrouter: 10
+  concurrency_gemini: 5
+  concurrency_build: 4
+  concurrency_render: 1
+  requests_per_min_vertex: 60
+  requests_per_min_openrouter: 100
+  max_total_tasks: null
+  stop_after_usd: null
+
+export:
+  holdout_niches: 0
+  validation_split: 0.0
+  holdout_niche_ids: []
+
+gcs:
+  bucket: null
+  prefix: titan-factory-outputs
+  upload_interval_tasks: 50
+
+vertex:
+  endpoint_template: "https://{region}-aiplatform.googleapis.com/v1/projects/{project}/locations/{region}/endpoints/openapi/chat/completions"
+
+openrouter:
+  base_url: "https://openrouter.ai/api/v1/chat/completions"
+

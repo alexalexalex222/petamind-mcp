@@ -1,0 +1,138 @@
+# TITAN-4-DESIGN Dataset Factory Configuration (OSS, mixed tasks, multi-prompt UIGEN)
+#
+# Goal:
+# - Generate OSS-friendly sites at scale.
+# - Accept anything that builds + renders (NO "winners" / no aesthetic judging).
+# - Optionally discard only clearly broken renders via a conservative Gemini vision gate.
+# - Run multiple UIGEN prompt variants "at the same time" (same run) to increase diversity.
+#
+# Usage:
+#   export GOOGLE_CLOUD_PROJECT=<billed-project>
+#   ./.venv/bin/titan-factory run --public-only --max-tasks 200 \
+#     --run-id oss_mixed_multiprompt_200 \
+#     --config config/config-vertex-oss-mixed-multiprompt-brokengate-200.yaml
+#
+# Preview screenshots:
+#   ./.venv/bin/titan-factory gallery --run-id oss_mixed_multiprompt_200
+#   python -m http.server 3001 --directory out/oss_mixed_multiprompt_200
+#   # then open: http://localhost:3001/gallery/index.html
+
+models:
+  planner:
+    provider: vertex
+    model: deepseek-ai/deepseek-v3.2-maas
+    publishable: true
+    max_tokens: 2000
+    temperature: 0.7
+
+  ui_generators:
+    - provider: vertex
+      model: moonshotai/kimi-k2-thinking-maas
+      publishable: true
+      variants: 2
+      max_tokens: 12000
+      temperature: 0.8
+    - provider: vertex
+      model: minimaxai/minimax-m2-maas
+      publishable: true
+      variants: 2
+      max_tokens: 12000
+      temperature: 0.8
+
+  # Build-error fixer. Keep rounds small; we only care about "not broken".
+  patcher:
+    provider: vertex
+    model: deepseek-ai/deepseek-v3.2-maas
+    publishable: true
+    max_tokens: 6000
+    temperature: 0.2
+
+  # Vision gate model (used only to discard clearly broken renders).
+  # If you want ZERO vision involvement, set broken_vision_gate_enabled=false below.
+  vision_judge:
+    provider: gemini
+    model: gemini-3-flash-preview
+    publishable: false
+    max_tokens: 800
+    temperature: 0.0
+
+pipeline:
+  # Accept-all mode (no scoring/winners)
+  skip_judge: true
+  generate_edit_tasks: false
+
+  # Mix prompt styles for planner input (local-business + SaaS/ecom/docs/app shells + OS demos).
+  task_prompt_pack: mixed
+
+  # Run ALL UIGEN prompt variants in the same run.
+  # NOTE: More prompts => more candidates => higher cost.
+  # For max throughput, keep only the "stacked" variant.
+  uigen_prompt_variants:
+    - id: builtin_ui_spec
+      source: builtin
+      input_mode: ui_spec
+    - id: titan_page_brief
+      source: file
+      path: prompts/titan_ui_system_long.txt
+      input_mode: page_brief
+    - id: stacked_all
+      input_mode: both
+      parts:
+        - source: builtin
+        - source: file
+          path: prompts/titan_ui_system_long.txt
+        - source: inline
+          text: |
+            GLOBAL OVERRIDES (APPLY EVEN IF OTHER PROMPTS CONFLICT):
+            - No emojis in any text. If an icon is needed, use simple inline SVG (keep icons minimal).
+            - Output must be STRICT: <think>...</think> followed by ONE valid JSON object.
+
+  # Discard only clearly broken renders (optional).
+  broken_vision_gate_enabled: true
+  broken_vision_gate_min_confidence: 0.85
+
+  # Build-fix rounds
+  max_fix_rounds: 1
+  polish_loop_enabled: false
+  vision_score_threshold: 0.0
+
+  # Landing-heavy runs (200 tasks total: 100 niches * 2)
+  page_type_filter: ["landing"]
+  tasks_per_niche: 2
+  total_niches: 100
+
+  shuffle_tasks: true
+  task_shuffle_seed: 1337
+
+  model_timeout_ms: 120000
+  build_timeout_ms: 240000
+  render_timeout_ms: 90000
+
+budget:
+  task_concurrency: 5
+  concurrency_vertex: 20
+  concurrency_openrouter: 10
+  concurrency_gemini: 5
+  concurrency_build: 4
+  concurrency_render: 1
+  requests_per_min_vertex: 60
+  requests_per_min_openrouter: 100
+  max_total_tasks: null
+  stop_after_usd: null
+
+export:
+  holdout_niches: 0
+  validation_split: 0.0
+  holdout_niche_ids: []
+
+gcs:
+  bucket: null
+  prefix: titan-factory-outputs
+  upload_interval_tasks: 50
+
+vertex:
+  endpoint_template: "https://{region}-aiplatform.googleapis.com/v1/projects/{project}/locations/{region}/endpoints/openapi/chat/completions"
+
+openrouter:
+  base_url: "https://openrouter.ai/api/v1/chat/completions"
+

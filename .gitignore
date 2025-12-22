@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+.eggs/
+*.egg-info/
+dist/
+build/
+
+# Environment
+.env
+.env.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Project outputs
+out/
+prompts/niches.json
+prompts/tasks.jsonl
+*.db
+
+# Node (template)
+templates/*/node_modules/
+templates/*/.next/
+templates/*/out/
+
+# Logs
+*.log

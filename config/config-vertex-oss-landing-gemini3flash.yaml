@@ -1,0 +1,84 @@
+# TITAN-4-DESIGN Dataset Factory Configuration
+# Vertex-only run with Gemini 3 Flash (preview) as the vision judge.
+
+models:
+  planner:
+    provider: vertex
+    model: deepseek-ai/deepseek-v3.2-maas
+    publishable: true
+    max_tokens: 2000
+    temperature: 0.7
+
+  ui_generators:
+    - provider: vertex
+      model: moonshotai/kimi-k2-thinking-maas
+      publishable: true
+      variants: 2
+      max_tokens: 12000
+      temperature: 0.8
+    - provider: vertex
+      model: minimaxai/minimax-m2-maas
+      publishable: true
+      variants: 2
+      max_tokens: 12000
+      temperature: 0.8
+
+  patcher:
+    provider: vertex
+    model: deepseek-ai/deepseek-v3.2-maas
+    publishable: true
+    max_tokens: 3000
+    temperature: 0.2
+
+  # Vision judge on Vertex (Gemini 3 Flash preview, multimodal)
+  vision_judge:
+    provider: gemini
+    model: gemini-3-flash-preview
+    publishable: false
+    max_tokens: 2000
+    temperature: 0.1
+
+pipeline:
+  # Use vision judge but accept all build-passed outputs
+  # (threshold 0 so we only drop broken builds)
+  skip_judge: false
+  vision_score_threshold: 0.0
+  max_fix_rounds: 2
+  polish_loop_enabled: true
+  # LANDING only
+  page_type_filter: ["landing"]
+  tasks_per_niche: 1
+  total_niches: 100
+  shuffle_tasks: true
+  task_shuffle_seed: 1337
+  model_timeout_ms: 120000
+  build_timeout_ms: 240000
+  render_timeout_ms: 90000
+
+budget:
+  task_concurrency: 5
+  concurrency_vertex: 5
+  concurrency_openrouter: 10
+  concurrency_gemini: 5
+  concurrency_build: 4
+  concurrency_render: 1
+  requests_per_min_vertex: 60
+  requests_per_min_openrouter: 100
+  max_total_tasks: null
+  stop_after_usd: null
+
+export:
+  holdout_niches: 0
+  validation_split: 0.08
+  holdout_niche_ids: []
+
+gcs:
+  bucket: null
+  prefix: titan-factory-outputs
+  upload_interval_tasks: 50
+
+vertex:
+  endpoint_template: "https://{region}-aiplatform.googleapis.com/v1/projects/{project}/locations/{region}/endpoints/openapi/chat/completions"
+
+openrouter:
+  base_url: "https://openrouter.ai/api/v1/chat/completions"

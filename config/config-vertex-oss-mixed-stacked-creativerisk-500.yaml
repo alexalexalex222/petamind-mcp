@@ -1,0 +1,121 @@
+# TITAN-4-DESIGN Dataset Factory Configuration (500 tasks, stacked mega prompt + creative risk)
+#
+# Goal: generate ~500 "no-losers" websites quickly:
+# - Skip numeric scoring/winners (accept anything that builds + renders).
+# - Discard ONLY clearly broken renders via a conservative Gemini broken gate.
+# - Creative risk dial is injected automatically by promptgen (high/medium/low).
+#
+# Usage:
+#   export GOOGLE_CLOUD_PROJECT=<billed-project>
+#   ./.venv/bin/titan-factory run --public-only \
+#     --run-id oss_stacked_creativerisk_500 \
+#     --config config/config-vertex-oss-mixed-stacked-creativerisk-500.yaml
+#
+# Preview (while running or after):
+#   ./.venv/bin/titan-factory gallery --run-id oss_stacked_creativerisk_500
+#   python3 -m http.server 3004 --directory out/oss_stacked_creativerisk_500
+#   # open http://localhost:3004/gallery/index.html
+
+models:
+  planner:
+    provider: vertex
+    model: deepseek-ai/deepseek-v3.2-maas
+    publishable: true
+    max_tokens: 2000
+    temperature: 0.7
+
+  # Keep one generator for speed and to target ~500 sites total.
+  ui_generators:
+    - provider: vertex
+      model: moonshotai/kimi-k2-thinking-maas
+      publishable: true
+      variants: 1
+      max_tokens: 12000
+      temperature: 0.85
+
+  # Build-fix patcher (compile-only)
+  patcher:
+    provider: vertex
+    model: deepseek-ai/deepseek-v3.2-maas
+    publishable: true
+    max_tokens: 6000
+    temperature: 0.2
+
+  # Not used in this "no-losers" config (kept for compatibility)
+  polisher:
+    provider: vertex
+    model: deepseek-ai/deepseek-v3.2-maas
+    publishable: true
+    max_tokens: 9000
+    temperature: 0.5
+
+  vision_judge:
+    provider: gemini
+    model: gemini-3-flash-preview
+    publishable: false
+    max_tokens: 800
+    temperature: 0.0
+
+pipeline:
+  # No winners. No numeric scoring.
+  skip_judge: true
+  generate_edit_tasks: false
+
+  # Mixed prompt pack gives variety beyond local-business niches (SaaS/ecom/app shells/OS demos)
+  task_prompt_pack: mixed
+
+  # Stacked mega prompt for UIGEN (all prompt rules applied together)
+  uigen_prompt_variants:
+    - id: stacked_all
+      input_mode: both
+      parts:
+        - source: builtin
+        - source: file
+          path: prompts/titan_ui_system_long.txt
+        - source: inline
+          text: |
+            GLOBAL OVERRIDES (APPLY EVEN IF OTHER PROMPTS CONFLICT):
+            - No emojis in any text. If an icon is needed, use simple inline SVG (keep icons minimal).
+            - Output must be STRICT: <think>...</think> followed by ONE valid JSON object.
+            - Creative risk should be followed: avoid boring/generic layouts; keep UX clear and build-safe.
+
+  # Broken-only gate (conservative)
+  broken_vision_gate_enabled: true
+  broken_vision_gate_min_confidence: 0.90
+
+  # Disable premium gate + polish for throughput (no losers except broken)
+  premium_vision_gate_enabled: false
+  polish_loop_enabled: false
+
+  max_fix_rounds: 1
+
+  # 500 tasks total:
+  # - landing-only runs are fastest and still include SaaS/ecom/docs templates via task_prompt_pack=mixed.
+  page_type_filter: ["landing"]
+  tasks_per_niche: 5
+  total_niches: 100
+
+  shuffle_tasks: true
+  task_shuffle_seed: 1337
+
+budget:
+  # 5 tasks at once (requested)
+  task_concurrency: 5
+  concurrency_vertex: 10
+  concurrency_gemini: 2
+  concurrency_build: 4
+  concurrency_render: 1
+  requests_per_min_vertex: 60
+
+  # Run all generated tasks (500)
+  max_total_tasks: null
+  stop_after_usd: null
+
+export:
+  holdout_niches: 0
+  validation_split: 0.0
+  holdout_niche_ids: []
+
+vertex:
+  endpoint_template: "https://{region}-aiplatform.googleapis.com/v1/projects/{project}/locations/{region}/endpoints/openapi/chat/completions"
+

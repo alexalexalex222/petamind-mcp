@@ -1,0 +1,75 @@
+# TITAN-4-DESIGN Dataset Factory Configuration - OpenRouter Mode
+# Uses OpenRouter instead of Vertex AI (no billing required)
+
+models:
+  # Stage 1: Planner (generates UI_SPEC)
+  planner:
+    provider: openrouter
+    model: deepseek/deepseek-chat
+    publishable: true
+    max_tokens: 2000
+    temperature: 0.7
+
+  # Stage 2: UI Generators (generate code candidates)
+  # Using OpenRouter models with thinking capability
+  ui_generators:
+    - provider: openrouter
+      model: deepseek/deepseek-chat
+      publishable: true
+      variants: 2
+      max_tokens: 12000
+      temperature: 0.8
+    - provider: openrouter
+      model: qwen/qwen-2.5-coder-32b-instruct
+      publishable: true
+      variants: 2
+      max_tokens: 12000
+      temperature: 0.8
+
+  # Stage 3: Patcher/Fixer (fixes build errors)
+  patcher:
+    provider: openrouter
+    model: mistralai/devstral-2512:free
+    publishable: true
+    max_tokens: 3000
+    temperature: 0.3
+
+  # Vision Judge (scores screenshots)
+  # Uses Gemini API directly (GEMINI_API_KEY is set)
+  vision_judge:
+    provider: gemini
+    model: gemini-2.0-flash
+    publishable: false
+    max_tokens: 4000
+    temperature: 0.1
+
+pipeline:
+  vision_score_threshold: 8.0
+  max_fix_rounds: 2
+  polish_loop_enabled: true
+  tasks_per_niche: 7
+  total_niches: 100
+  model_timeout_ms: 120000
+  build_timeout_ms: 240000
+  render_timeout_ms: 90000
+
+budget:
+  concurrency_vertex: 5
+  concurrency_openrouter: 5
+  requests_per_min_vertex: 60
+  requests_per_min_openrouter: 60
+  max_total_tasks: null
+  stop_after_usd: null
+
+export:
+  holdout_niches: 12
+  validation_split: 0.08
+  holdout_niche_ids: []
+
+gcs:
+  bucket: null
+  prefix: titan-factory-outputs
+  upload_interval_tasks: 50
+
+openrouter:
+  base_url: "https://openrouter.ai/api/v1/chat/completions"

@@ -1,0 +1,65 @@
+# TITAN-4-DESIGN - FREE MODELS ONLY
+# No billing required
+
+models:
+  # Planner - using free Devstral
+  planner:
+    provider: openrouter
+    model: mistralai/devstral-2512:free
+    publishable: true
+    max_tokens: 2000
+    temperature: 0.7
+
+  # UI Generators - using free models
+  ui_generators:
+    - provider: openrouter
+      model: mistralai/devstral-2512:free
+      publishable: true
+      variants: 2
+      max_tokens: 12000
+      temperature: 0.8
+    - provider: openrouter
+      model: qwen/qwen3-32b:free
+      publishable: true
+      variants: 2
+      max_tokens: 12000
+      temperature: 0.8
+
+  # Patcher - free
+  patcher:
+    provider: openrouter
+    model: mistralai/devstral-2512:free
+    publishable: true
+    max_tokens: 3000
+    temperature: 0.3
+
+  # Vision Judge - Gemini API (free tier)
+  vision_judge:
+    provider: gemini
+    model: gemini-2.0-flash
+    publishable: false
+    max_tokens: 4000
+    temperature: 0.1
+
+pipeline:
+  vision_score_threshold: 8.0
+  max_fix_rounds: 2
+  polish_loop_enabled: true
+  tasks_per_niche: 7
+  total_niches: 100
+  model_timeout_ms: 120000
+  build_timeout_ms: 240000
+  render_timeout_ms: 90000
+
+budget:
+  concurrency_vertex: 5
+  concurrency_openrouter: 3
+  requests_per_min_vertex: 60
+  requests_per_min_openrouter: 20
+  max_total_tasks: null
+  stop_after_usd: null
+
+export:
+  holdout_niches: 12
+  validation_split: 0.08
+  holdout_niche_ids: []

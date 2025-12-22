@@ -1,0 +1,89 @@
+# FAILED RESPONSE: MiniMax M2 - Variant 0
+# ========================================
+# Candidate ID: cb4e3b59baf8
+# Model: minimaxai/minimax-m2-maas
+# Error: Failed to extract JSON from response: <think>I need to generate...
+
+# =============================================================================
+# RAW_GENERATOR_RESPONSE (showing full structure):
+# =============================================================================
+
+<think>I need to generate a complete Next.js landing page for a martial arts gym with the specifications provided. Let me break down what I need to include:
+
+1. Brand settings:
+   - Name: Dragon Academy House
+   - Dark mood with teal accents
+   - Medium radius (rounded-lg, rounded-xl)
+   - Balanced density (py-16, px-6)
+
+2. Required sections:
+   - Hero with headline, subheadline, primary CTA
+   - Trust indicators with badges and stats
+   - How it works with steps
+   - Testimonials with carousel
+   - Pricing with tiers
+   - FAQ with accordion
+   - Final CTA with headline and primary CTA
+
+3. Content to include:
+   - Business name: Dragon Academy House
+   - City: Phoenix
+   - Offer: Elite martial arts training in a powerful, dynamic environment
+   - Audience: Adults and teens seeking discipline, fitness, and self-defense skills
+   - Highlights: World-Class Instructors, State-of-the-Art Facility, Personalized Progression Paths
+   - Testimonials from Alex Rivera and Maya Chen
+   - FAQ with 3 questions about experience, schedule, and free trial
+
+4. CTAs:
+   - Primary: Get Started
+   - Secondary: View Classes
+
+Since this is a single landing page, I'll create one main page.tsx file with all the sections. I need to make it visually premium with dark background, teal accents, and card-based layouts.
+
+Let me structure the components within the same file since it's a landing page and we want to keep it focused.
+</think>
+
+{
+  "files": [
+    {
+      "path": "app/page.tsx",
+      "content": "'use client'\n\nimport React, { useState } from 'react'\n\ninterface Testimonial {\n  name: string\n  text: string\n}\n\ninterface FAQ {\n  q: string\n  a: string\n}\n\nconst DragonAcademyHouse = () => {\n  const [openFAQ, setOpenFAQ] = useState<number | null>(null)\n  const [currentTestimonial, setCurrentTestimonial] = useState(0)\n\n  const testimonials: Testimonial[] = [\n    {\n      name: \"Alex Rivera\",\n      text: \"Transformed my fitness and confidence in six months. The community is incredible.\"\n    },\n
+
+<!-- TRUNCATED - response continues with more code but gets cut off -->
+
+# =============================================================================
+# ANALYSIS - THIS IS THE TRICKY ONE:
+# =============================================================================
+#
+# 1. Has <think>...</think> block - PROPERLY CLOSED
+# 2. JSON follows the think block WITHOUT markdown code block wrapper
+# 3. JSON appears to start correctly: { "files": [ ...
+# 4. BUT the response is TRUNCATED somewhere in the code content
+#
+# THE CURRENT extract_json() SHOULD HANDLE THIS:
+# 1. Strip <think>...</think> block ✓
+# 2. Try direct parse - fails (truncated)
+# 3. Try code block - fails (no ```)
+# 4. Try { to } - fails (no closing })
+#
+# SO WHY DOES THE ERROR SAY:
+# "Failed to extract JSON from response: <think>I need to generate..."
+#
+# THIS MEANS THE <think> BLOCK WAS NOT STRIPPED!
+#
+# POSSIBLE BUG:
+# The regex `r"<think>[\s\S]*?</think>\s*"` is non-greedy.
+# If there are nested angle brackets or special chars, it might fail.
+#
+# Let me check the actual content more carefully...
+# The </think> tag IS present and properly closed.
+#
+# WAIT - The error message shows the response STARTS with <think>.
+# If the think block was stripped, it would start with {.
+# So the stripping is FAILING somehow.
+#
+# HYPOTHESIS:
+# Maybe there's whitespace or BOM characters before <think>?
+# Or the regex is compiled incorrectly?
+#
+# =============================================================================

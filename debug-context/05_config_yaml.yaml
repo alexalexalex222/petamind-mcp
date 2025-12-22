@@ -1,0 +1,76 @@
+# TITAN-4-DESIGN Dataset Factory Configuration
+# ============================================
+# Location: config/config.yaml
+
+models:
+  # Stage 1: Planner (generates UI_SPEC)
+  planner:
+    provider: vertex
+    model: deepseek-ai/deepseek-v3.2-maas
+    publishable: true
+    max_tokens: 2000
+    temperature: 0.7
+
+  # Stage 2: UI Generators (generate code candidates)
+  # Note: Thinking models need extra tokens for <think> blocks + code
+  ui_generators:
+    - provider: vertex
+      model: moonshotai/kimi-k2-thinking-maas    # THINKING MODEL
+      publishable: true
+      variants: 2                                  # 2 variants per model
+      max_tokens: 8000                            # 8K tokens for think + code
+      temperature: 0.8
+    - provider: vertex
+      model: minimaxai/minimax-m2-maas           # SOMETIMES outputs <think>
+      publishable: true
+      variants: 2                                  # 2 variants per model
+      max_tokens: 8000
+      temperature: 0.8
+
+  # Stage 3: Patcher/Fixer (fixes build errors)
+  patcher:
+    provider: openrouter
+    model: mistralai/devstral-2512:free
+    publishable: true
+    max_tokens: 3000
+    temperature: 0.3
+
+  # Vision Judge (scores screenshots - NOT used for training)
+  vision_judge:
+    provider: gemini
+    model: gemini-3-pro-preview                  # THINKING MODEL
+    publishable: false
+    max_tokens: 4000                             # Needs 4K for thinking on 3 images
+    temperature: 0.1
+
+pipeline:
+  # Scoring threshold (0-10)
+  vision_score_threshold: 8.0
+
+  # Max fix attempts per candidate
+  max_fix_rounds: 2
+
+  # Timeouts (milliseconds)
+  model_timeout_ms: 120000   # 2 minutes for model responses
+  build_timeout_ms: 240000   # 4 minutes for builds
+  render_timeout_ms: 90000   # 90 seconds for screenshots
+
+
+# =============================================================================
+# KEY INSIGHT: max_tokens is 8000 for UI generators
+# =============================================================================
+#
+# Is 8000 enough? Let's estimate:
+# - <think> block: 500-2000 tokens of reasoning
+# - JSON wrapper: ~50 tokens
+# - Code content: A full landing page is easily 4000-6000 tokens
+# - Notes: ~50 tokens
+#
+# TOTAL: 4600 - 8100 tokens
+#
+# This is RIGHT AT THE LIMIT. If the model's reasoning is longer or the
+# code is more complex, we'll hit truncation!
+#
+# RECOMMENDATION: Consider increasing to 10000-12000 tokens.
+#
+# =============================================================================

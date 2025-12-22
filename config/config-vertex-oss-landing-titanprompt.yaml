@@ -1,0 +1,112 @@
+# TITAN-4-DESIGN Dataset Factory Configuration (Vertex-only, landing-only, build-only)
+#
+# Goal: generate many OSS-friendly landing pages quickly.
+# - No winners / no scoring: discard only broken (build/render failures)
+# - Accept ALL rendered candidates per task (skip_judge=true)
+# - Use the TITAN_UI system prompt override (TSX_ONLY output)
+#
+# Usage:
+#   export GOOGLE_CLOUD_PROJECT=<billed-project>
+#   ./.venv/bin/titan-factory run --public-only --max-tasks 20 \
+#     --run-id oss-landing-titanprompt-20 \
+#     --config config/config-vertex-oss-landing-titanprompt.yaml
+
+models:
+  planner:
+    provider: vertex
+    model: deepseek-ai/deepseek-v3.2-maas
+    publishable: true
+    max_tokens: 2000
+    temperature: 0.7
+
+  ui_generators:
+    - provider: vertex
+      model: moonshotai/kimi-k2-thinking-maas
+      publishable: true
+      variants: 2
+      max_tokens: 12000
+      temperature: 0.8
+    - provider: vertex
+      model: minimaxai/minimax-m2-maas
+      publishable: true
+      variants: 2
+      max_tokens: 12000
+      temperature: 0.8
+
+  # Build-error fixer. Set max_fix_rounds to 0 if you want to discard broken candidates instead of fixing.
+  patcher:
+    provider: vertex
+    model: deepseek-ai/deepseek-v3.2-maas
+    publishable: true
+    max_tokens: 3000
+    temperature: 0.2
+
+  # Vision judge is configured but skipped by pipeline.skip_judge=true.
+  vision_judge:
+    provider: gemini
+    model: gemini-3-pro-preview
+    publishable: false
+    max_tokens: 4000
+    temperature: 0.1
+
+pipeline:
+  # IMPORTANT: accept-all mode (no winners)
+  skip_judge: true
+  # Disable edit task creation so --max-tasks is an exact upper bound
+  generate_edit_tasks: false
+  # Override UI generator system prompt
+  uigen_system_prompt_path: prompts/titan_ui_system_long.txt
+
+  # Broken-only filtering: build must pass and render must succeed
+  max_fix_rounds: 1
+  polish_loop_enabled: false
+  vision_score_threshold: 0.0
+
+  # LANDING only
+  page_type_filter: ["landing"]
+  tasks_per_niche: 1
+  total_niches: 100
+
+  # Shuffle to avoid biasing toward early niches (prevents "all martial arts" batches)
+  shuffle_tasks: true
+  task_shuffle_seed: 1337
+
+  model_timeout_ms: 120000
+  build_timeout_ms: 240000
+  render_timeout_ms: 90000
+
+budget:
+  # Run up to 5 tasks concurrently (planner + generator + build + render pipeline)
+  task_concurrency: 5
+
+  # Provider-level concurrency (model calls)
+  concurrency_vertex: 10
+  concurrency_openrouter: 10
+  concurrency_gemini: 2
+
+  # Local work concurrency
+  concurrency_build: 4
+  concurrency_render: 1
+
+  # Rate limits (requests per minute)
+  requests_per_min_vertex: 60
+  requests_per_min_openrouter: 100
+
+  max_total_tasks: null
+  stop_after_usd: null
+
+export:
+  holdout_niches: 0
+  validation_split: 0.0
+  holdout_niche_ids: []
+
+gcs:
+  bucket: null
+  prefix: titan-factory-outputs
+  upload_interval_tasks: 50
+
+vertex:
+  endpoint_template: "https://{region}-aiplatform.googleapis.com/v1/projects/{project}/locations/{region}/endpoints/openapi/chat/completions"
+
+openrouter:
+  base_url: "https://openrouter.ai/api/v1/chat/completions"

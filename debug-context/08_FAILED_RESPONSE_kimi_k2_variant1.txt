@@ -1,0 +1,47 @@
+# FAILED RESPONSE: Kimi K2 Thinking - Variant 1
+# ==============================================
+# Candidate ID: 28602b2145cd
+# Model: moonshotai/kimi-k2-thinking-maas
+# Error: Failed to extract JSON from response: { "files": [ ...
+
+# =============================================================================
+# RAW_GENERATOR_RESPONSE (TRUNCATED - showing first ~8000 chars):
+# =============================================================================
+
+{
+  "files": [
+    {
+      "path": "app/page.tsx",
+      "content": "import { useState, useEffect } from 'react';\nimport Head from 'next/head';\n\ninterface Testimonial {\n  name: string;\n  text: string;\n}\n\ninterface FAQItem {\n  q: string;\n  a: string;\n}\n\ninterface PricingTier {\n  name: string;\n  price: string;\n  features: string[];\n  featured?: boolean;\n}\n\nconst testimonials: Testimonial[] = [\n  {\n    name: \"Alex Rivera\",\n    text: \"Transformed my fitness and confidence in six months. The community is incredible.\"\n  },\n  {\n    name: \"Maya Chen\",\n    text: \"The instructors are masters at breaking down complex techniques. I've never felt stronger.\"\n  }\n];\n\nconst faqItems: FAQItem[] = [\n  {\n    q: \"Do I need prior experience to join?\",\n    a: \"No, we offer programs for all skill levels from beginner to advanced.\"\n  },\n  {\n    q: \"What is the class schedule like?\",\n    a: \"We offer morning, afternoon, and evening classes seven days a week.\"\n  },\n  {\n    q: \"Is there a free trial available?\",\n    a: \"Yes, we provide a complimentary introductory class for all new members.\"\n  }\n];\n\nconst pricingTiers: PricingTier[] = [\n  {\n    name: \"Warrior\",\n    price: \"$149/mo\",\n    features: [\"8 classes/month\", \"Basic techniques\", \"Community access\", \"Progress tracking\"]\n  },\n  {\n    name: \"Mastery\",\n    price: \"$199/mo\",\n    features: [\"Unlimited classes\", \"All techniques\", \"1-on-1 monthly\", \"Gear included\", \"Priority booking\"],\n    featured: true\n  },\n  {\n    name: \"Elite\",\n    price: \"$299/mo\",\n    features: [\"Unlimited classes\", \"Private training\", \"Competition prep\", \"VIP events\", \"Merchandise discount\"]\n  }\n];\n\nexport default function Home() {\n  const [currentSlide, setCurrentSlide] = useState(0);\n  const [openFAQ, setOpenFAQ] = useState<number | null>(null);\n\n  useEffect(() => {\n    const timer = setInterval(() => {\n      setCurrentSlide((prev) => (prev + 1) % testimonials.length);\n    }, 5000);\n    return () => clearInterval(timer);\n  }, []);\n\n  const handleFAQToggle = (index: number) => {\n    setOpenFAQ(openFAQ === index ? null : index);\n  };\n\n  return (\n    <>\n      <Head>\n        <title>Dragon Academy House - Elite Martial Arts Training in Phoenix</title>\n        <meta name=\"description\" content=\"Elite martial arts training in a powerful, dynamic environment for adults and teens seeking discipline, fitness, and self-defense skills.\" />\n        <link rel=\"preconnect\" href=\"https://fonts.googleapis.com\" />\n        <link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossOrigin=\"\" />\n        <link href=\"https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap\" rel=\"stylesheet\" />\n      </Head>\n      \n      <main className=\"min-h-screen bg-neutral-900 text-white font-sans\" style={{ fontFamily: 'Inter, sans-serif' }}>\n        <!-- ... LOTS MORE CODE ... -->\n\n        <section className=\"py-16 px-6 bg-neutral-800\">\n          <div className=\"max-w-4xl mx-auto\">\n            <h2 className=\"text-4xl font-bold text-center mb-12\">Frequently Asked Questions</h2>\n            <div className=\"space-y-4\">\n              {faqItems.map((item, index) => (\n                <div key={index} className=\"bg-neutral-700 rounded-xl overflow-hidden\">\n                  <button
+                    onClick
+
+# =============================================================================
+# RESPONSE ENDS HERE - TRUNCATED MID-CODE!
+# =============================================================================
+
+# ANALYSIS:
+# ---------
+# 1. NO <think> block present - model followed instructions... mostly
+# 2. Response is valid JSON UNTIL it gets truncated
+# 3. The JSON ends with `onClick` - in the middle of a JSX attribute!
+# 4. This is CLEARLY a max_tokens truncation issue
+#
+# THE JSON IS SYNTACTICALLY BROKEN:
+# - Missing: the rest of the onClick handler
+# - Missing: the rest of the button element
+# - Missing: the rest of the FAQ section
+# - Missing: closing sections, footer, etc.
+# - Missing: closing braces for the files array and main object
+#
+# WHY extract_json FAILS:
+# 1. Direct parse fails (incomplete JSON)
+# 2. Code block extraction fails (no ``` markers)
+# 3. Find { and } fails because there's no closing }
+#
+# POSSIBLE FIX:
+# Detect truncation and either:
+# a) Attempt JSON repair (add missing braces)
+# b) Skip this candidate and log warning
+# c) Check finish_reason before extraction
+#
+# =============================================================================
