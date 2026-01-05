@@ -2,6 +2,8 @@
 
 import asyncio
 import fnmatch
+import hashlib
+import re
 import shutil
 import tempfile
 from pathlib import Path
@@ -28,6 +30,89 @@ ALLOWED_PATH_PATTERNS = [
     "public/*",
     "styles/*.css",
 ]
+
+_CLIENT_HOOK_REGEX = re.compile(
+    r"\buse(State|Effect|Memo|Callback|Ref|Reducer|LayoutEffect|Transition|DeferredValue|Id|Context)\b"
+)
+_CLIENT_EVENT_HANDLER_REGEX = re.compile(
+    r"\bon(Click|Submit|Change|Input|KeyDown|KeyUp|KeyPress|Focus|Blur|MouseEnter|MouseLeave)\s*="
+)
+_USE_CLIENT_DIRECTIVE_REGEX = re.compile(r"^\s*(['\"])use client\1\s*;?\s*$", re.MULTILINE)
+_USE_SERVER_DIRECTIVE_REGEX = re.compile(r"^\s*(['\"])use server\1\s*;?\s*$", re.MULTILINE)
+
+
+def _strip_outer_markdown_fence(content: str) -> str:
+    stripped = content.strip()
+    if not (stripped.startswith("```") and stripped.endswith("```")):
+        return content
+
+    lines = stripped.splitlines()
+    if len(lines) < 2:
+        return content
+    if not lines[0].startswith("```"):
+        return content
+    if lines[-1].strip() != "```":
+        return content
+
+    inner = "\n".join(lines[1:-1]).strip("\n")
+    return f"{inner}\n" if inner else ""
+
+
+def _has_use_client_directive(content: str) -> bool:
+    head = "\n".join(content.splitlines()[:10])
+    return _USE_CLIENT_DIRECTIVE_REGEX.search(head) is not None
+
+
+def _needs_use_client_directive(content: str) -> bool:
+    # If the file declares "use server", never inject "use client".
+    head = "\n".join(content.splitlines()[:10])
+    if _USE_SERVER_DIRECTIVE_REGEX.search(head) is not None:
+        return False
+
+    if _has_use_client_directive(content):
+        return False
+
+    if _CLIENT_HOOK_REGEX.search(content) is not None:
+        return True
+
+    if _CLIENT_EVENT_HANDLER_REGEX.search(content) is not None:
+        return True
+
+    for token in ("window.", "document.", "localStorage", "sessionStorage", "navigator.", "location."):
+        if token in content:
+            return True
+
+    return False
+
+
+def _inject_use_client_directive(content: str) -> str:
+    if _has_use_client_directive(content):
+        return content
+    return f"'use client';\n\n{content}"
+
+
+def _apply_deterministic_prebuild_fixes(candidate: Candidate) -> None:
+    """Apply safe, deterministic code fixes before attempting a Next.js build."""
+    added_use_client = False
+    stripped_fences = False
+
+    for f in candidate.files:
+        original = f.content
+        content = _strip_outer_markdown_fence(original)
+        if content != original:
+            stripped_fences = True
+
+        if f.path in ("app/page.tsx", "app/page.jsx") and _needs_use_client_directive(content):
+            content = _inject_use_client_directive(content)
+            added_use_client = True
+
+        if content != original:
+            f.content = content
+
+    if added_use_client:
+        log_info(f"Candidate {candidate.id}: Preflight added 'use client' directive (client-only usage detected)")
+    if stripped_fences and not added_use_client:
+        log_info(f"Candidate {candidate.id}: Preflight stripped outer markdown fences from file content")
 
 
 def is_path_allowed(file_path: str) -> bool:
@@ -117,11 +202,32 @@ async def setup_node_modules_cache(config: Config) -> Path:
         cache_dir = config.out_path / "cache" / "node_modules_template"
         ensure_dir(cache_dir)
 
-        # Check if already populated
-        if (cache_dir / "node_modules").exists():
-            _node_modules_cache = cache_dir
-            log_info("Using cached node_modules")
-            return cache_dir
+        # Cache invalidation: if template deps change, rebuild node_modules.
+        # This prevents subtle "works on my machine" bugs when package-lock updates.
+        template_lock = config.template_path / "package-lock.json"
+        template_pkg = config.template_path / "package.json"
+        hash_source = template_lock if template_lock.exists() else template_pkg
+        template_hash = hashlib.sha256(hash_source.read_bytes()).hexdigest()
+        hash_file = cache_dir / ".titan_template_deps_hash"
+
+        node_modules_dir = cache_dir / "node_modules"
+        if node_modules_dir.exists():
+            cached_hash = None
+            try:
+                cached_hash = hash_file.read_text(encoding="utf-8").strip()
+            except Exception:
+                cached_hash = None
+
+            if cached_hash == template_hash:
+                _node_modules_cache = cache_dir
+                log_info("Using cached node_modules")
+                return cache_dir
+
+            log_warning("Template dependencies changed; rebuilding cached node_modules")
+            try:
+                shutil.rmtree(node_modules_dir)
+            except Exception as e:
+                log_warning(f"Failed to remove cached node_modules: {e}")
 
         # Copy template and install
         log_info("Setting up node_modules cache (this may take a minute)...")
@@ -143,6 +249,11 @@ async def setup_node_modules_cache(config: Config) -> Path:
             log_error(f"npm ci failed: {stderr}")
             raise RuntimeError(f"Failed to install dependencies: {stderr}")
 
+        try:
+            hash_file.write_text(template_hash, encoding="utf-8")
+        except Exception as e:
+            log_warning(f"Failed to write deps hash file: {e}")
+
         _node_modules_cache = cache_dir
         log_info("node_modules cache ready")
         return cache_dir
@@ -163,6 +274,8 @@ async def validate_candidate(
     """
     if not candidate.files:
         return False, "No files to validate"
+
+    _apply_deterministic_prebuild_fixes(candidate)
 
     # Ensure node_modules cache exists
     cache_dir = await setup_node_modules_cache(config)

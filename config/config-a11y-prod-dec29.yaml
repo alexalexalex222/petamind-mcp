@@ -1,0 +1,111 @@
+# A11Y Production Scaling Config (Dec 29, 2025)
+#
+# Purpose:
+# - Run larger batches (50/500 tasks) while keeping deterministic gates recorded.
+# - Keep gates in OBSERVE mode (enforce=false) until thresholds are proven at scale.
+#
+# Notes:
+# - In the Dec 28 baseline, most non-shippables were axe critical failures (select-name/button-name).
+# - Prompts were updated to hard-require accessible names for <select> and icon-only <button>.
+# - This config increases concurrency to make 500-task runs feasible.
+
+models:
+  planner:
+    provider: vertex
+    model: deepseek-ai/deepseek-v3.2-maas
+    publishable: true
+    max_tokens: 2000
+    temperature: 0.6
+
+  ui_generators:
+    - provider: vertex
+      model: moonshotai/kimi-k2-thinking-maas
+      publishable: true
+      variants: 1
+      max_tokens: 65000
+      temperature: 0.8
+    - provider: vertex
+      model: minimaxai/minimax-m2-maas
+      publishable: true
+      variants: 1
+      max_tokens: 65000
+      temperature: 0.8
+
+  patcher:
+    # Vertex-only: do NOT use OpenRouter (no credits).
+    provider: vertex
+    model: deepseek-ai/deepseek-v3.2-maas
+    publishable: true
+    max_tokens: 16000
+    temperature: 0.2
+
+  vision_judge:
+    provider: gemini
+    # skip_judge=true, so we explicitly disable the vision model to prevent any Gemini calls.
+    model: null
+    publishable: false
+    max_tokens: 2000
+    temperature: 0.1
+
+pipeline:
+  skip_judge: true
+
+  deterministic_gates_enabled: true
+  deterministic_gates_enforce: false
+
+  axe_gate_enabled: true
+  axe_fail_impacts: ["critical"]
+  axe_timeout_ms: 60000
+
+  lighthouse_gate_enabled: true
+  lighthouse_preset: desktop
+  # Give Lighthouse extra headroom when multiple renders run concurrently.
+  lighthouse_timeout_ms: 240000
+
+  lighthouse_min_scores:
+    performance: 0.35
+    accessibility: 0.70
+    best_practices: 0.70
+    seo: 0.60
+
+  megamind_enabled: false
+  refinement_enabled: false
+  creative_director_mode: false
+
+  max_fix_rounds: 2
+
+  polish_loop_enabled: false
+  generate_edit_tasks: false
+
+  tasks_per_niche: 7
+  total_niches: 100
+
+  # Slightly higher headroom for provider responses under concurrency.
+  model_timeout_ms: 150000
+  build_timeout_ms: 240000
+  render_timeout_ms: 120000
+
+budget:
+  # Parallelize tasks to make 500-task runs feasible.
+  # Keep render concurrency bounded; renderer finds open ports, but higher concurrency increases CPU + port-race risk.
+  task_concurrency: 5
+  concurrency_vertex: 10
+  concurrency_gemini: 1
+  concurrency_build: 5
+  concurrency_render: 2
+  requests_per_min_vertex: 60
+  max_total_tasks: null
+  stop_after_usd: null
+
+export:
+  holdout_niches: 12
+  validation_split: 0.08
+  holdout_niche_ids: []
+
+gcs:
+  bucket: null
+  prefix: titan-factory-outputs
+  upload_interval_tasks: 50
+
+vertex:
+  endpoint_template: "https://{region}-aiplatform.googleapis.com/v1/projects/{project}/locations/{region}/endpoints/openapi/chat/completions"

@@ -1,0 +1,114 @@
+# Claude Opus 4.5 + Raw Baseline (NO pipeline) — Jan 1, 2026
+#
+# Purpose: Benchmark Claude Opus 4.5 WITHOUT the Titan pipeline.
+# Direct prompt → code generation to compare against full pipeline.
+#
+# Run:
+#   .venv/bin/python -m titan_factory.cli run \
+#     --max-tasks 25 --run-id opus45-raw-25 \
+#     -c config/config-opus45-raw-baseline-jan1.yaml
+
+models:
+  planner:
+    provider: anthropic_vertex
+    model: claude-opus-4-5@20251101
+    publishable: false
+    max_tokens: 500
+    temperature: 0.0
+
+  # Single generator × 2 variants
+  ui_generators:
+    - provider: anthropic_vertex
+      model: claude-opus-4-5@20251101
+      publishable: false
+      variants: 2
+      max_tokens: 65000
+      temperature: 0.7
+
+  patcher:
+    provider: vertex
+    model: qwen/qwen3-coder-480b-a35b-instruct-maas
+    publishable: true
+    max_tokens: 9000
+    temperature: 0.2
+
+  vision_judge:
+    provider: gemini
+    model: gemini-3-flash
+    publishable: false
+    max_tokens: 800
+    temperature: 0.0
+    force_adc: true
+
+pipeline:
+  # Raw mode: bypass UI_SPEC planning
+  raw_generation_enabled: true
+
+  skip_judge: true
+  generate_edit_tasks: false
+  task_prompt_pack: mixed
+
+  uigen_prompt_variants:
+    - id: stacked_all
+      input_mode: page_brief
+      parts:
+        - source: file
+          path: prompts/titan_ui_system_long.txt
+        - source: inline
+          text: |
+            GLOBAL OVERRIDES (APPLY EVEN IF OTHER PROMPTS CONFLICT):
+            - Output must be STRICT JSON. No <think> blocks. Just output the JSON object directly.
+            - No emojis in any text. If an icon is needed, use simple inline SVG (keep icons minimal).
+            - Follow the provided brand accent exactly; do not default to violet/purple.
+            - Follow the Creative risk dial; avoid boring/generic layouts; keep UX clear and build-safe.
+
+  deterministic_gates_enabled: true
+  deterministic_gates_enforce: false
+
+  axe_gate_enabled: true
+  axe_fail_impacts: ["critical"]
+  axe_timeout_ms: 60000
+
+  lighthouse_gate_enabled: true
+  lighthouse_preset: desktop
+  lighthouse_timeout_ms: 240000
+  lighthouse_min_scores:
+    accessibility: 0.80
+    performance: 0.00
+    best_practices: 0.00
+    seo: 0.00
+
+  broken_vision_gate_enabled: true
+  broken_vision_gate_min_confidence: 0.85
+
+  megamind_enabled: false
+  refinement_enabled: false
+  creative_director_mode: false
+  polish_loop_enabled: false
+  creativity_refinement_enabled: false
+
+  max_fix_rounds: 1
+
+  model_timeout_ms: 180000
+  build_timeout_ms: 240000
+  render_timeout_ms: 120000
+
+budget:
+  task_concurrency: 1
+  concurrency_vertex: 3
+  concurrency_gemini: 1
+  concurrency_build: 2
+  concurrency_render: 2
+  requests_per_min_vertex: 20
+  max_total_tasks: null
+  stop_after_usd: null
+
+export:
+  holdout_niches: 0
+  validation_split: 0.0
+  holdout_niche_ids: []
+
+gcs:
+  bucket: null
+  prefix: titan-factory-outputs
+  upload_interval_tasks: 50

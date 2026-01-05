@@ -82,7 +82,7 @@ async def check_providers(config) -> bool:
     ProviderFactory.clear()
 
     all_passed = True
-    providers_to_check = ["vertex", "openrouter", "gemini"]
+    providers_to_check = ["vertex", "openrouter", "gemini", "anthropic_vertex"]
 
     for provider_name in providers_to_check:
         try:
@@ -112,7 +112,7 @@ async def check_gemini_auth(config) -> bool:
             key = provider.api_key
             if key and len(key) > 10:
                 print_check("GOOGLE_API_KEY set", True)
-                print(f"    Key: {key[:8]}...{key[-4:]}")
+                # Never print full or partial credentials.
                 return True
             else:
                 print_check("GOOGLE_API_KEY set", False, "Key is empty or too short")
@@ -123,7 +123,7 @@ async def check_gemini_auth(config) -> bool:
 
             if token and len(token) > 20:
                 print_check("ADC token obtained", True)
-                print(f"    Token: {token[:20]}...{token[-10:]}")
+                # Never print full or partial tokens.
                 return True
             else:
                 print_check("ADC token obtained", False, "Token is empty or invalid")
@@ -140,15 +140,29 @@ async def check_openrouter_key(config) -> bool:
     print_section("4. OpenRouter Configuration")
 
     import os
+
+    providers_in_use = {
+        str(getattr(config.planner, "provider", "") or ""),
+        str(getattr(config.patcher, "provider", "") or ""),
+        str(getattr(config.vision_judge, "provider", "") or ""),
+        *[str(getattr(gen, "provider", "") or "") for gen in getattr(config, "ui_generators", [])],
+    }
+    providers_in_use = {p.strip().lower() for p in providers_in_use if p.strip()}
+
+    if "openrouter" not in providers_in_use:
+        print_check("OPENROUTER_API_KEY (optional)", True)
+        print("    Not required (openrouter is not used by the active config).")
+        return True
+
     key = os.getenv("OPENROUTER_API_KEY", "")
 
     if key and len(key) > 10:
         print_check("OPENROUTER_API_KEY set", True)
-        print(f"    Key: {key[:8]}...{key[-4:]}")
+        # Never print full or partial credentials.
         return True
     else:
         print_check("OPENROUTER_API_KEY set", False, "Environment variable not set")
-        print("\n    \033[93mFix: export OPENROUTER_API_KEY='sk-or-...' \033[0m")
+        print("\n    \033[93mFix: export OPENROUTER_API_KEY='<your key>' \033[0m")
         return False
 
 
@@ -314,10 +328,10 @@ async def live_test_gemini_vision(config) -> bool:
             Message(role="user", content="What color is this image? Reply with just the color name.")
         ]
 
-        # Use gemini-2.0-flash for API key mode (more widely available)
+        # Use gemini-3-flash for API key mode (more widely available)
         # Use config model for ADC mode (Vertex AI)
         if provider.auth_mode == "api_key":
-            model = "gemini-2.0-flash"
+            model = "gemini-3-flash"
         else:
             model = config.vision_judge.model
 

@@ -1,0 +1,418 @@
+{
+  "serene_minimal": [
+    {
+      "persona": "Serene studio calm / airy editorial minimal",
+      "keywords_mandatory": ["serene", "airy", "soft", "calm", "mindful", "quiet-confidence"],
+      "avoid": ["neon", "terminal", "hacker", "glow", "aggressive", "dense-dashboard"],
+      "density": "airy",
+      "imagery_style": "abstract_shapes",
+      "layout_motif": "soft curves + quiet grids",
+      "preferred_moods": ["light"],
+      "preferred_accents": ["teal", "green", "rose", "cyan"]
+    },
+    {
+      "persona": "Warm minimal / artisanal calm",
+      "keywords_mandatory": ["warm", "minimal", "organic", "gentle", "breathable", "refined"],
+      "avoid": ["neon", "terminal", "hacker", "glitch", "harsh-contrast", "dense-dashboard"],
+      "density": "airy",
+      "imagery_style": "illustrative",
+      "layout_motif": "paper textures (simulated) + soft bands",
+      "preferred_moods": ["light"],
+      "preferred_accents": ["amber", "orange", "teal", "green"]
+    },
+    {
+      "persona": "High-contrast editorial calm",
+      "keywords_mandatory": ["editorial", "spacious", "elegant", "type-led", "subtle-depth", "premium"],
+      "avoid": ["neon", "terminal", "hacker", "sci-fi", "gamer", "dense-dashboard"],
+      "density": "balanced",
+      "imagery_style": "minimal_none",
+      "layout_motif": "pull-quote rail + airy sections",
+      "preferred_moods": ["light"],
+      "preferred_accents": ["blue", "teal", "rose"]
+    }
+  ],
+  "industrial_raw": [
+    {
+      "persona": "Industrial grit / strong typography",
+      "keywords_mandatory": ["industrial", "bold-type", "raw", "high-impact", "structured", "tough"],
+      "avoid": ["neon", "terminal", "hacker", "cute", "pastel", "dainty"],
+      "density": "balanced",
+      "imagery_style": "abstract_shapes",
+      "layout_motif": "angled cuts + heavy blocks",
+      "preferred_moods": ["dark", "light"],
+      "preferred_accents": ["orange", "red", "amber"]
+    },
+    {
+      "persona": "Athletic modern / punchy conversion",
+      "keywords_mandatory": ["athletic", "energetic", "punchy", "confident", "performance", "clean-edges"],
+      "avoid": ["neon", "terminal", "hacker", "soft-glow", "whimsical", "fluffy"],
+      "density": "balanced",
+      "imagery_style": "product_focused",
+      "layout_motif": "metric chips + stepped process",
+      "preferred_moods": ["dark", "light"],
+      "preferred_accents": ["red", "orange", "teal"]
+    },
+    {
+      "persona": "Workshop utilitarian / no-nonsense",
+      "keywords_mandatory": ["utilitarian", "direct", "trustworthy", "rugged", "clear", "service-first"],
+      "avoid": ["neon", "terminal", "hacker", "luxury", "ornate", "over-animated"],
+      "density": "balanced",
+      "imagery_style": "minimal_none",
+      "layout_motif": "utility grid + clear CTAs",
+      "preferred_moods": ["light"],
+      "preferred_accents": ["blue", "orange", "green"]
+    }
+  ],
+  "premium_luxury": [
+    {
+      "persona": "Quiet luxury / high-end whitespace",
+      "keywords_mandatory": ["luxury", "quiet", "elegant", "spacious", "refined", "premium"],
+      "avoid": ["neon", "terminal", "hacker", "loud", "gamer", "cheap-gradients"],
+      "density": "airy",
+      "imagery_style": "minimal_none",
+      "layout_motif": "editorial hero + restrained accents",
+      "preferred_moods": ["light", "dark"],
+      "preferred_accents": ["amber", "rose", "blue"]
+    },
+    {
+      "persona": "Modern luxe / glossy highlights",
+      "keywords_mandatory": ["modern-luxe", "polished", "sleek", "subtle-shine", "composed", "confident"],
+      "avoid": ["neon", "terminal", "hacker", "cartoon", "noisy", "dense-dashboard"],
+      "density": "balanced",
+      "imagery_style": "abstract_shapes",
+      "layout_motif": "soft gradients + layered cards",
+      "preferred_moods": ["dark", "light"],
+      "preferred_accents": ["fuchsia", "violet", "amber"]
+    },
+    {
+      "persona": "Boutique premium / craft-forward",
+      "keywords_mandatory": ["boutique", "crafted", "warm-premium", "tasteful", "story", "detail-obsessed"],
+      "avoid": ["neon", "terminal", "hacker", "sterile", "generic", "gamer"],
+      "density": "airy",
+      "imagery_style": "illustrative",
+      "layout_motif": "story sections + proof wall",
+      "preferred_moods": ["light"],
+      "preferred_accents": ["rose", "amber", "orange"]
+    }
+  ],
+  "editorial_typographic": [
+    {
+      "persona": "Editorial typography / magazine rhythm",
+      "keywords_mandatory": ["editorial", "type-led", "rhythmic", "clean", "thoughtful", "premium"],
+      "avoid": ["terminal", "hacker", "neon", "glitch", "dashboard", "loud-tech"],
+      "density": "balanced",
+      "imagery_style": "minimal_none",
+      "layout_motif": "pull quotes + section rails",
+      "preferred_moods": ["light"],
+      "preferred_accents": ["blue", "teal", "orange"]
+    },
+    {
+      "persona": "Modern editorial / bold headings",
+      "keywords_mandatory": ["bold-headlines", "editorial", "structured", "crisp", "spacious", "confident"],
+      "avoid": ["terminal", "hacker", "neon", "gamer", "glow", "dense-dashboard"],
+      "density": "balanced",
+      "imagery_style": "abstract_shapes",
+      "layout_motif": "asymmetric hero + bento mid-page",
+      "preferred_moods": ["light", "dark"],
+      "preferred_accents": ["orange", "red", "cyan"]
+    },
+    {
+      "persona": "Restaurant editorial / artisanal",
+      "keywords_mandatory": ["artisanal", "warm", "editorial", "inviting", "sensory", "crafted"],
+      "avoid": ["terminal", "hacker", "neon", "sterile", "dashboard", "cold-tech"],
+      "density": "balanced",
+      "imagery_style": "illustrative",
+      "layout_motif": "menu-style sections + warm bands",
+      "preferred_moods": ["light"],
+      "preferred_accents": ["amber", "orange", "green"]
+    }
+  ],
+  "friendly_playful": [
+    {
+      "persona": "Friendly playful / bright and approachable",
+      "keywords_mandatory": ["friendly", "playful", "bright", "rounded", "optimistic", "approachable"],
+      "avoid": ["terminal", "hacker", "neon", "grim", "aggressive", "dark-only"],
+      "density": "balanced",
+      "imagery_style": "illustrative",
+      "layout_motif": "rounded cards + cheerful icons",
+      "preferred_moods": ["light"],
+      "preferred_accents": ["cyan", "lime", "orange", "fuchsia"]
+    },
+    {
+      "persona": "Soft playful / cozy and cute",
+      "keywords_mandatory": ["cozy", "soft", "cute", "warm", "comforting", "gentle"],
+      "avoid": ["terminal", "hacker", "neon", "harsh", "glitch", "dense-dashboard"],
+      "density": "airy",
+      "imagery_style": "illustrative",
+      "layout_motif": "soft gradients + rounded sections",
+      "preferred_moods": ["light"],
+      "preferred_accents": ["rose", "amber", "cyan"]
+    },
+    {
+      "persona": "Bold playful / high-contrast fun",
+      "keywords_mandatory": ["fun", "bold", "high-contrast", "graphic", "energetic", "memorable"],
+      "avoid": ["terminal", "hacker", "neon-tech", "sterile", "corporate", "gamer-ui"],
+      "density": "balanced",
+      "imagery_style": "abstract_shapes",
+      "layout_motif": "graphic bands + playful bento",
+      "preferred_moods": ["light"],
+      "preferred_accents": ["fuchsia", "orange", "cyan"]
+    }
+  ],
+  "trusted_professional": [
+    {
+      "persona": "Trusted professional / clean and credible",
+      "keywords_mandatory": ["credible", "clean", "structured", "trust", "calm", "professional"],
+      "avoid": ["terminal", "hacker", "neon", "glitch", "chaotic", "over-animated"],
+      "density": "balanced",
+      "imagery_style": "minimal_none",
+      "layout_motif": "clear hierarchy + proof wall",
+      "preferred_moods": ["light"],
+      "preferred_accents": ["blue", "teal", "green"]
+    },
+    {
+      "persona": "Executive modern / understated power",
+      "keywords_mandatory": ["understated", "executive", "modern", "confident", "polished", "premium"],
+      "avoid": ["terminal", "hacker", "neon", "cute", "noisy", "gamer"],
+      "density": "balanced",
+      "imagery_style": "abstract_shapes",
+      "layout_motif": "split hero + structured sections",
+      "preferred_moods": ["light", "dark"],
+      "preferred_accents": ["blue", "teal", "amber"]
+    },
+    {
+      "persona": "Human-first professional / warm trust",
+      "keywords_mandatory": ["human", "welcoming", "clear", "supportive", "trust", "approachable"],
+      "avoid": ["terminal", "hacker", "neon", "cold-tech", "glitch", "dense-dashboard"],
+      "density": "balanced",
+      "imagery_style": "people_focused",
+      "layout_motif": "warm sections + reassuring FAQ",
+      "preferred_moods": ["light"],
+      "preferred_accents": ["green", "teal", "rose"]
+    }
+  ],
+  "clean_clinical": [
+    {
+      "persona": "Clean clinical / bright reassurance",
+      "keywords_mandatory": ["clean", "clinical", "bright", "reassuring", "precise", "calm"],
+      "avoid": ["terminal", "hacker", "neon", "glitch", "moody", "gritty"],
+      "density": "airy",
+      "imagery_style": "minimal_none",
+      "layout_motif": "cards + clear steps + trust badges",
+      "preferred_moods": ["light"],
+      "preferred_accents": ["cyan", "blue", "teal"]
+    },
+    {
+      "persona": "Modern healthcare / calm confidence",
+      "keywords_mandatory": ["modern", "calm", "organized", "clear", "trust", "gentle"],
+      "avoid": ["terminal", "hacker", "neon", "dark-only", "glitch", "loud-tech"],
+      "density": "balanced",
+      "imagery_style": "abstract_shapes",
+      "layout_motif": "stepper + appointment CTA",
+      "preferred_moods": ["light"],
+      "preferred_accents": ["teal", "green", "blue"]
+    },
+    {
+      "persona": "Spa-clinic hybrid / serene clinical",
+      "keywords_mandatory": ["serene", "clean", "premium", "soft", "spa-like", "care-first"],
+      "avoid": ["terminal", "hacker", "neon", "industrial", "gritty", "dense-dashboard"],
+      "density": "airy",
+      "imagery_style": "illustrative",
+      "layout_motif": "soft bands + elegant pricing",
+      "preferred_moods": ["light"],
+      "preferred_accents": ["rose", "teal", "amber"]
+    }
+  ],
+  "cyber_tech": [
+    {
+      "persona": "Cyber tech / terminal-inspired, high-contrast",
+      "keywords_mandatory": ["cyber", "technical", "precise", "high-contrast", "systematic", "fast"],
+      "avoid": ["cute", "handwritten", "cozy", "floral", "pastel", "storybook"],
+      "density": "compact",
+      "imagery_style": "abstract_shapes",
+      "layout_motif": "grid + glow accents + crisp cards",
+      "preferred_moods": ["dark"],
+      "preferred_accents": ["violet", "cyan", "fuchsia", "teal"]
+    },
+    {
+      "persona": "Modern SaaS / minimal power",
+      "keywords_mandatory": ["saas", "modern", "confident", "clean", "crisp", "premium"],
+      "avoid": ["cute", "storybook", "rustic", "ornate", "overly-playful", "handmade"],
+      "density": "balanced",
+      "imagery_style": "product_focused",
+      "layout_motif": "hero gradient + bento features",
+      "preferred_moods": ["dark", "light"],
+      "preferred_accents": ["blue", "teal", "violet", "cyan"]
+    },
+    {
+      "persona": "Developer tools / utilitarian clarity",
+      "keywords_mandatory": ["developer", "utilitarian", "direct", "structured", "fast", "clear"],
+      "avoid": ["cute", "storybook", "floral", "handwritten", "cozy", "ornate"],
+      "density": "compact",
+      "imagery_style": "minimal_none",
+      "layout_motif": "tight grids + precise typography",
+      "preferred_moods": ["dark"],
+      "preferred_accents": ["teal", "cyan", "lime"]
+    }
+  ],
+  "outdoors_rugged": [
+    {
+      "persona": "Outdoors rugged / trail energy",
+      "keywords_mandatory": ["outdoors", "rugged", "adventurous", "fresh", "bold", "grounded"],
+      "avoid": ["terminal", "hacker", "neon", "glitch", "sterile", "gamer"],
+      "density": "balanced",
+      "imagery_style": "product_focused",
+      "layout_motif": "trail map motif + rugged cards",
+      "preferred_moods": ["light", "dark"],
+      "preferred_accents": ["green", "amber", "orange"]
+    },
+    {
+      "persona": "Clean outdoors / modern explorer",
+      "keywords_mandatory": ["clean", "outdoor-modern", "spacious", "confident", "fresh", "clear"],
+      "avoid": ["terminal", "hacker", "neon", "glitch", "dense-dashboard", "cyber"],
+      "density": "airy",
+      "imagery_style": "abstract_shapes",
+      "layout_motif": "wide hero + layered sections",
+      "preferred_moods": ["light"],
+      "preferred_accents": ["green", "teal", "blue"]
+    },
+    {
+      "persona": "Adventure editorial / bold stories",
+      "keywords_mandatory": ["editorial", "adventure", "story", "bold", "textured", "premium"],
+      "avoid": ["terminal", "hacker", "neon", "glitch", "sterile", "dashboard"],
+      "density": "balanced",
+      "imagery_style": "illustrative",
+      "layout_motif": "timeline journey + proof chips",
+      "preferred_moods": ["light", "dark"],
+      "preferred_accents": ["amber", "orange", "blue"]
+    }
+  ],
+  "artisanal_warm": [
+    {
+      "persona": "Artisanal warm / craft and texture (simulated)",
+      "keywords_mandatory": ["artisanal", "warm", "crafted", "inviting", "human", "organic"],
+      "avoid": ["terminal", "hacker", "neon", "glitch", "sterile", "cold-tech"],
+      "density": "balanced",
+      "imagery_style": "illustrative",
+      "layout_motif": "warm bands + ingredient cards",
+      "preferred_moods": ["light"],
+      "preferred_accents": ["amber", "orange", "rose"]
+    },
+    {
+      "persona": "Coffeehouse modern / cozy premium",
+      "keywords_mandatory": ["cozy", "warm-premium", "refined", "inviting", "calm", "crafted"],
+      "avoid": ["terminal", "hacker", "neon", "glitch", "gamer", "loud-tech"],
+      "density": "airy",
+      "imagery_style": "product_focused",
+      "layout_motif": "menu-like sections + story",
+      "preferred_moods": ["light", "dark"],
+      "preferred_accents": ["amber", "orange", "green"]
+    },
+    {
+      "persona": "Modern craft / clean warmth",
+      "keywords_mandatory": ["clean-warm", "crafted", "modern", "human", "simple", "tasteful"],
+      "avoid": ["terminal", "hacker", "neon", "glitch", "sterile", "cyber"],
+      "density": "balanced",
+      "imagery_style": "abstract_shapes",
+      "layout_motif": "bento products + warm proof wall",
+      "preferred_moods": ["light"],
+      "preferred_accents": ["orange", "amber", "teal"]
+    }
+  ],
+  "community_nonprofit": [
+    {
+      "persona": "Community nonprofit / hopeful and trustworthy",
+      "keywords_mandatory": ["hopeful", "trust", "community", "welcoming", "clear", "impact-led"],
+      "avoid": ["terminal", "hacker", "neon", "glitch", "luxury", "aggressive"],
+      "density": "balanced",
+      "imagery_style": "people_focused",
+      "layout_motif": "impact stats + volunteer CTA",
+      "preferred_moods": ["light"],
+      "preferred_accents": ["green", "teal", "blue"]
+    },
+    {
+      "persona": "Warm mission / human stories",
+      "keywords_mandatory": ["human", "story", "warm", "mission", "supportive", "inviting"],
+      "avoid": ["terminal", "hacker", "neon", "glitch", "sterile", "cold-tech"],
+      "density": "airy",
+      "imagery_style": "illustrative",
+      "layout_motif": "story blocks + proof chips",
+      "preferred_moods": ["light"],
+      "preferred_accents": ["rose", "amber", "green"]
+    },
+    {
+      "persona": "Modern impact / clean transparency",
+      "keywords_mandatory": ["transparent", "impact", "clean", "credible", "simple", "actionable"],
+      "avoid": ["terminal", "hacker", "neon", "glitch", "gamer", "dense-dashboard"],
+      "density": "balanced",
+      "imagery_style": "minimal_none",
+      "layout_motif": "impact dashboard (lightweight) + donate CTA",
+      "preferred_moods": ["light"],
+      "preferred_accents": ["blue", "teal", "green"]
+    }
+  ],
+  "event_festival": [
+    {
+      "persona": "Event festival / energetic and bold",
+      "keywords_mandatory": ["energetic", "celebratory", "bold", "dynamic", "fun", "crowd"],
+      "avoid": ["terminal", "hacker", "neon-tech", "glitch", "sterile", "corporate"],
+      "density": "balanced",
+      "imagery_style": "abstract_shapes",
+      "layout_motif": "schedule timeline + ticket CTA",
+      "preferred_moods": ["light", "dark"],
+      "preferred_accents": ["fuchsia", "orange", "cyan"]
+    },
+    {
+      "persona": "Wedding editorial / romantic premium",
+      "keywords_mandatory": ["romantic", "elegant", "soft", "premium", "airy", "timeless"],
+      "avoid": ["terminal", "hacker", "neon", "glitch", "gamer", "industrial"],
+      "density": "airy",
+      "imagery_style": "minimal_none",
+      "layout_motif": "editorial hero + story sections",
+      "preferred_moods": ["light"],
+      "preferred_accents": ["rose", "amber", "blue"]
+    },
+    {
+      "persona": "Nightlife / bold and sleek",
+      "keywords_mandatory": ["nightlife", "sleek", "bold", "dramatic", "high-contrast", "premium"],
+      "avoid": ["terminal", "hacker", "storybook", "cozy", "floral", "handmade"],
+      "density": "balanced",
+      "imagery_style": "abstract_shapes",
+      "layout_motif": "hero glow + lineup grid",
+      "preferred_moods": ["dark"],
+      "preferred_accents": ["fuchsia", "violet", "orange"]
+    }
+  ],
+  "financial_data_driven": [
+    {
+      "persona": "Financial data-driven / crisp and confident",
+      "keywords_mandatory": ["data-driven", "trust", "crisp", "structured", "clear", "professional"],
+      "avoid": ["terminal", "hacker", "neon", "glitch", "cute", "chaotic"],
+      "density": "balanced",
+      "imagery_style": "product_focused",
+      "layout_motif": "clarity panels + transparent pricing",
+      "preferred_moods": ["light", "dark"],
+      "preferred_accents": ["blue", "teal", "green"]
+    },
+    {
+      "persona": "Wealth premium / understated sophistication",
+      "keywords_mandatory": ["wealth", "premium", "understated", "quiet-confidence", "refined", "credible"],
+      "avoid": ["terminal", "hacker", "neon", "glitch", "cartoon", "loud"],
+      "density": "airy",
+      "imagery_style": "minimal_none",
+      "layout_motif": "quiet hero + proof wall",
+      "preferred_moods": ["light"],
+      "preferred_accents": ["amber", "blue", "teal"]
+    },
+    {
+      "persona": "Modern fintech / friendly trust",
+      "keywords_mandatory": ["modern", "fintech", "friendly", "clear", "secure", "fast"],
+      "avoid": ["terminal", "hacker", "neon", "glitch", "gamer", "cyber"],
+      "density": "balanced",
+      "imagery_style": "abstract_shapes",
+      "layout_motif": "bento features + reassurance section",
+      "preferred_moods": ["light", "dark"],
+      "preferred_accents": ["cyan", "teal", "blue"]
+    }
+  ]
+}

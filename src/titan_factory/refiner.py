@@ -161,6 +161,15 @@ RULES:
 - Maintain the existing design aesthetic
 - EMOJI → SVG: If told to remove emojis, replace with simple inline SVG icons (24x24 path-based, use currentColor)
 
+ACCESSIBILITY FIXES (when flagged by axe-core):
+- select-name: Add <label htmlFor="id"> before <select id="id"> (sr-only ok), OR add aria-label to select
+- button-name: Add aria-label to any non-text button (icons/arrows/dots):
+  - <button aria-label="Previous testimonial">…</button>
+  - <button aria-label="Close menu">…</button>
+  - Dot pagination: <button aria-label="Go to testimonial 2" … />
+- label: Add <label htmlFor="id"> for inputs, OR add aria-label to input
+- focus-visible: Add focus:ring-2 focus:ring-offset-2 classes to interactive elements
+
 OUTPUT (JSON ONLY):
 {
   "files": [

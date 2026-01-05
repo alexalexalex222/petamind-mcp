@@ -1,0 +1,213 @@
+# Style-Routed Megamind v2 + Creativity North Star — Jan 2, 2026 (Kimi Planner)
+#
+# Purpose:
+# - Same as config-style-v2-jan2.yaml, but replaces DeepSeek with Kimi K2 for planning
+#   (planner + STYLE_GUARDIAN + BOLD_CONVERSION + SYNTHESIZER).
+# - This tests the hypothesis that DeepSeek-as-planner is a creativity bottleneck.
+#
+# Run (5-task debug):
+#   .venv/bin/python -m titan_factory.cli run --max-tasks 5 --run-id jan2-style-v2-kimi-5a -c config/config-style-v2-jan2-kimi-planner.yaml
+#
+# Notes:
+# - Kimi is more likely to output non-strict JSON than DeepSeek; megamind/uigen have retry/salvage paths.
+# - Vision judge is still Gemini 3 Flash, and shippable deterministic gates remain enabled (observe mode).
+
+models:
+  planner:
+    provider: vertex
+    model: moonshotai/kimi-k2-thinking-maas
+    publishable: true
+    max_tokens: 65000
+    temperature: 0.7
+
+  # 2 generators × 2 variants = 4 candidates/task
+  ui_generators:
+    - provider: vertex
+      model: moonshotai/kimi-k2-thinking-maas
+      publishable: true
+      variants: 2
+      max_tokens: 65000
+      temperature: 0.7
+    - provider: vertex
+      model: minimaxai/minimax-m2-maas
+      publishable: true
+      variants: 2
+      max_tokens: 65000
+      temperature: 0.7
+
+  # Build fixer (Vertex-only)
+  patcher:
+    provider: vertex
+    model: qwen/qwen3-coder-480b-a35b-instruct-maas
+    publishable: true
+    max_tokens: 65000
+    temperature: 0.2
+
+  # Section-level creativity refiner (surgical edits).
+  polisher:
+    provider: vertex
+    model: moonshotai/kimi-k2-thinking-maas
+    publishable: true
+    max_tokens: 65000
+    temperature: 0.85
+
+  # Vision judge (Gemini via ADC/Vertex)
+  vision_judge:
+    provider: gemini
+    model: gemini-3.0-flash
+    publishable: false
+    max_tokens: 65000
+    temperature: 0.7
+    force_adc: true
+
+  # Megamind v2 mapping:
+  # - megamind_safe -> STYLE_GUARDIAN (style lock)
+  # - megamind_bold -> BOLD_LAYOUT (signature layout moments)
+  # - megamind_minimal -> BOLD_CONVERSION (CRO structure)
+  #
+  # In this config we also move STYLE_GUARDIAN / CONVERSION / SYNTHESIZER onto Kimi to
+  # test whether DeepSeek's planner bias is suppressing creativity.
+  megamind_bold:
+    provider: vertex
+    model: moonshotai/kimi-k2-thinking-maas
+    publishable: true
+    max_tokens: 12000
+    temperature: 0.8
+
+  megamind_minimal:
+    provider: vertex
+    model: moonshotai/kimi-k2-thinking-maas
+    publishable: true
+    max_tokens: 16000
+    temperature: 0.65
+
+  megamind_safe:
+    provider: vertex
+    model: moonshotai/kimi-k2-thinking-maas
+    publishable: true
+    max_tokens: 16000
+    temperature: 0.35
+
+  megamind_synthesizer:
+    provider: vertex
+    model: moonshotai/kimi-k2-thinking-maas
+    publishable: true
+    max_tokens: 20000
+    temperature: 0.35
+
+pipeline:
+  skip_judge: false
+  vision_score_threshold: 0.0
+
+  # Style routing + enforcement (observe first)
+  style_routing_enabled: true
+  style_gates_enabled: true
+  style_gates_enforce: false
+
+  # EVOL diversity mutations (deterministic; no extra model calls)
+  evol_enabled: true
+  evol_passes: 2
+
+  # Section-level creativity refinement (surgical, uses polisher model)
+  creativity_refinement_enabled: true
+  creativity_min_section_score: 0.7
+  creativity_max_refinement_passes: 2
+
+  # Megamind v2 (style-lock + amplify)
+  megamind_enabled: true
+  megamind_v2_enabled: true
+
+  # Creativity is the north star (shippable still required).
+  creativity_gate:
+    enabled: true
+    min_avg: 0.0
+    min_high_sections: 2
+    enforce: false
+
+  # Winner selection
+  selection:
+    mode: creativity_first
+    judge_weight: 0.2
+    creativity_weight: 0.8
+
+  # Refinement: on, but not overly aggressive (avoid polishing away creativity).
+  refinement_enabled: true
+  refine_pass2_threshold: 7.0
+  refine_pass3_threshold: 8.0
+  max_refine_passes: 2
+  creative_director_mode: false
+
+  refinement:
+    skip_for_high_creativity: true
+    creativity_skip_threshold: 0.7
+
+  # Blank/broken-page killer (cheap and conservative; runs before scoring too)
+  broken_vision_gate_enabled: true
+  broken_vision_gate_min_confidence: 0.85
+
+  # Deterministic gates (record always; enforce only when tuned)
+  deterministic_gates_enabled: true
+  deterministic_gates_enforce: false
+
+  axe_gate_enabled: true
+  axe_fail_impacts: ["critical"]
+  axe_timeout_ms: 60000
+
+  lighthouse_gate_enabled: true
+  lighthouse_preset: desktop
+  lighthouse_timeout_ms: 240000
+  lighthouse_min_scores:
+    accessibility: 0.80
+    performance: 0.00
+    best_practices: 0.00
+    seo: 0.00
+
+  task_prompt_pack: mixed
+  generate_edit_tasks: false
+
+  uigen_prompt_variants:
+    - id: stacked_all
+      input_mode: both
+      parts:
+        - source: builtin
+        - source: file
+          path: prompts/titan_ui_system_long.txt
+        - source: inline
+          text: |
+            GLOBAL OVERRIDES (APPLY EVEN IF OTHER PROMPTS CONFLICT):
+            - Output must be STRICT: <think>...</think> followed by ONE valid JSON object.
+            - No emojis in any text. If an icon is needed, use simple inline SVG (keep icons minimal).
+            - Follow the provided style routing fields exactly (no cyber/terminal leak outside cyber_tech).
+            - Follow the provided brand accent exactly; do not default to violet/purple.
+            - Follow the Creative risk dial; avoid boring/generic layouts; keep UX clear and build-safe.
+
+  max_fix_rounds: 2
+  polish_loop_enabled: false
+
+  model_timeout_ms: 150000
+  build_timeout_ms: 240000
+  render_timeout_ms: 120000
+
+budget:
+  task_concurrency: 2
+  concurrency_vertex: 8
+  concurrency_gemini: 2
+  concurrency_build: 2
+  concurrency_render: 2
+  requests_per_min_vertex: 60
+  max_total_tasks: null
+  stop_after_usd: null
+
+export:
+  holdout_niches: 0
+  validation_split: 0.0
+  holdout_niche_ids: []
+
+gcs:
+  bucket: null
+  prefix: titan-factory-outputs
+  upload_interval_tasks: 50
+
+vertex:
+  endpoint_template: "https://{region}-aiplatform.googleapis.com/v1/projects/{project}/locations/{region}/endpoints/openapi/chat/completions"
+

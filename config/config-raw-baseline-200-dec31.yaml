@@ -1,0 +1,146 @@
+# Raw baseline (200-task scale run, no planner/judge/refine) — Dec 31, 2025
+#
+# Purpose:
+# - "No pipeline at all" baseline at larger scale: system prompt + task prompt → code.
+# - Still runs build → render → deterministic gates (axe + Lighthouse) so we can compute shippable composite.
+#
+# Notes:
+# - This is NOT intended to be the cheapest possible run — it is intended to be *measurable* and *viewable*.
+# - We keep a minimal build-fix loop (max_fix_rounds=1) so pages actually render.
+# - No OpenRouter spend. Generators/patcher are Vertex MaaS. Gemini uses ADC/Vertex (force_adc).
+#
+# Run:
+#   .venv/bin/python -m titan_factory.cli run \
+#     --max-tasks 200 --run-id raw-baseline-200 \
+#     -c config/config-raw-baseline-200-dec31.yaml
+
+models:
+  # Planner is unused in raw mode, but must be present for schema.
+  planner:
+    provider: vertex
+    model: deepseek-ai/deepseek-v3.2-maas
+    publishable: true
+    max_tokens: 500
+    temperature: 0.0
+
+  # 2 generators × 1 variant = 2 candidates per task
+  ui_generators:
+    - provider: vertex
+      model: moonshotai/kimi-k2-thinking-maas
+      publishable: true
+      variants: 1
+      max_tokens: 65000
+      temperature: 0.7
+    - provider: vertex
+      model: minimaxai/minimax-m2-maas
+      publishable: true
+      variants: 1
+      max_tokens: 65000
+      temperature: 0.7
+
+  # Patcher is used only if max_fix_rounds > 0 (we keep 1 round for render reliability)
+  patcher:
+    provider: vertex
+    model: qwen/qwen3-coder-480b-a35b-instruct-maas
+    publishable: true
+    max_tokens: 9000
+    temperature: 0.2
+
+  # Vision judge is not used (skip_judge=true), but broken gate uses it.
+  vision_judge:
+    provider: gemini
+    model: gemini-3-flash
+    publishable: false
+    max_tokens: 800
+    temperature: 0.0
+    force_adc: true
+
+pipeline:
+  # Raw mode: bypass UI_SPEC planning
+  raw_generation_enabled: true
+
+  # Accept-all mode: no scoring/refinement/selection by aesthetics
+  skip_judge: true
+  generate_edit_tasks: false
+  task_prompt_pack: mixed
+
+  # Increase prompt universe diversity (not max-tasks; this controls generation of prompts/tasks.jsonl)
+  tasks_per_niche: 10
+  total_niches: 100
+
+  # Use the same stacked system prompt as production runs.
+  uigen_prompt_variants:
+    - id: stacked_all
+      input_mode: page_brief
+      parts:
+        - source: file
+          path: prompts/titan_ui_system_long.txt
+        - source: inline
+          text: |
+            GLOBAL OVERRIDES (APPLY EVEN IF OTHER PROMPTS CONFLICT):
+            - Output must be STRICT: <think>...</think> followed by ONE valid JSON object.
+            - No emojis in any text. If an icon is needed, use simple inline SVG (keep icons minimal).
+            - Follow the provided brand accent exactly; do not default to violet/purple.
+            - Follow the Creative risk dial; avoid boring/generic layouts; keep UX clear and build-safe.
+
+  # Deterministic gates on
+  deterministic_gates_enabled: true
+  deterministic_gates_enforce: false
+
+  axe_gate_enabled: true
+  axe_fail_impacts: ["critical"]
+  axe_timeout_ms: 60000
+
+  lighthouse_gate_enabled: true
+  lighthouse_preset: desktop
+  lighthouse_timeout_ms: 240000
+  lighthouse_min_scores:
+    accessibility: 0.80
+    performance: 0.00
+    best_practices: 0.00
+    seo: 0.00
+
+  # Blank/broken page killer
+  broken_vision_gate_enabled: true
+  broken_vision_gate_min_confidence: 0.85
+
+  # Disable expensive loops for baseline purity
+  megamind_enabled: false
+  refinement_enabled: false
+  creative_director_mode: false
+  polish_loop_enabled: false
+  creativity_refinement_enabled: false
+
+  # Minimal fix loop so pages render for evaluation/portals.
+  max_fix_rounds: 1
+
+  model_timeout_ms: 150000
+  build_timeout_ms: 240000
+  render_timeout_ms: 120000
+
+budget:
+  # User request: 10 tasks in flight.
+  task_concurrency: 10
+
+  # Keep conservative to avoid Vertex 429 RESOURCE_EXHAUSTED.
+  concurrency_vertex: 10
+  concurrency_gemini: 2
+  concurrency_build: 3
+  concurrency_render: 2
+  requests_per_min_vertex: 60
+
+  max_total_tasks: null
+  stop_after_usd: null
+
+export:
+  holdout_niches: 0
+  validation_split: 0.0
+  holdout_niche_ids: []
+
+gcs:
+  bucket: null
+  prefix: titan-factory-outputs
+  upload_interval_tasks: 50
+
+vertex:
+  endpoint_template: "https://{region}-aiplatform.googleapis.com/v1/projects/{project}/locations/{region}/endpoints/openapi/chat/completions"

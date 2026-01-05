@@ -1,6 +1,58 @@
-# TITAN-4-DESIGN DATASET FACTORY v1
+# Petamind MCP
 
-A production-grade synthetic dataset generator for fine-tuning small student models on UI/UX design tasks (landing pages, directories, dashboards) using Next.js App Router + TypeScript + Tailwind.
+A Claude Code **MCP server** for a multi-candidate agentic coding loop:
+reasoner plan → generate patches → deterministic gates → **mandatory vision scoring** → pick the best winner.
+
+**Poetiq-style refinement loop (descriptive, not affiliated):**
+This project uses “Poetiq-style” *descriptively* to refer to iterative refinement loops
+(generate → critique → refine → verify). It is **not affiliated** with Poetiq.
+
+Setup guide: `docs/MCP_PETAMIND_MCP.md`.
+Vertex setup: `docs/VERTEX_SETUP.md`.
+Troubleshooting: `docs/TROUBLESHOOTING.md`.
+
+## MCP Quick Start (Claude Code)
+
+### Option A (recommended): install from PyPI via `pipx`
+
+```bash
+pipx install petamind-mcp
+petamind-setup
+```
+
+Then add the MCP server to Claude Code (user scope):
+
+```bash
+claude mcp add-json --scope user petamind-mcp '{"command":"petamind-mcp","args":[]}'
+```
+
+Notes:
+- `petamind-setup` installs Playwright Chromium (required for the mandatory vision loop).
+- You do **not** need Google Cloud credentials to use `petamind_eval_patch` with `vision_provider=client` (default).
+
+### Option B: install from a git clone (contributors / hacking)
+
+From this repo root:
+
+```bash
+./scripts/setup.sh
+```
+
+Then follow `docs/MCP_PETAMIND_MCP.md` to add the server to Claude Code via `.mcp.json` or `claude mcp add-json`.
+
+### Minimal Claude Code config (user scope)
+
+```bash
+claude mcp add-json --scope user petamind-mcp '{
+  "command": "'"$(pwd)"'/.venv/bin/python",
+  "args": ["-m", "petamind_mcp.mcp_server"]
+}'
+```
+
+## Included: Synthetic UI Dataset Factory
+
+This repo also includes a production-grade synthetic dataset generator for UI/UX design tasks
+(landing pages, directories, dashboards) using Next.js App Router + TypeScript + Tailwind.
 
 ## Features
 
@@ -10,14 +62,16 @@ A production-grade synthetic dataset generator for fine-tuning small student mod
 - **Two output tracks**: `public/` (publishable models only) and `private/` (all models)
 - **No contamination**: Chain-of-thought/thinking never stored; only structured specs + code
 
+## Claude Code MCP (agentic coding)
+
+This repo also ships an MCP server (`petamind-mcp`) that exposes a multi-candidate
+patch/test/vision loop to Claude Code. Setup guide: `docs/MCP_PETAMIND_MCP.md`.
+
 ## Quick Start
 
 ### 1. Environment Setup
 
 ```bash
-# Clone and enter
-cd titan-4-design-factory
-
 # Create virtual environment
 python3 -m venv .venv
 source .venv/bin/activate

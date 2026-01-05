@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import os
 import random
 from pathlib import Path
 from typing import Iterator
@@ -24,6 +25,52 @@ def stable_hash(s: str) -> int:
         Stable 31-bit positive integer
     """
     return int(hashlib.sha256(s.encode()).hexdigest(), 16) % (2**31)
+
+
+# Accent/mood hints:
+# Some planner models tend to overuse a single "default" aesthetic (commonly violet + white/black).
+# To keep dataset distribution healthy, we inject deterministic theme overrides per task prompt.
+_ACCENT_CHOICES: list[str] = [
+    "blue",
+    "teal",
+    "green",
+    "orange",
+    "red",
+    "violet",
+    "amber",
+    "rose",
+    "cyan",
+    "lime",
+    "fuchsia",
+]
+_MOOD_CHOICES: list[str] = ["light", "dark"]
+
+
+def _deterministic_brand_theme(seed: int, niche: "NicheDefinition") -> tuple[str, str]:
+    """Choose a deterministic (mood, accent) pair for a task.
+
+    This is intentionally simple and stable:
+    - It does NOT depend on Python's randomized hash()
+    - It produces repeatable variety across tasks
+    """
+    mood = _MOOD_CHOICES[stable_hash(f"{seed}:{niche.id}:mood") % len(_MOOD_CHOICES)]
+    accent = _ACCENT_CHOICES[stable_hash(f"{seed}:{niche.id}:accent") % len(_ACCENT_CHOICES)]
+    return mood, accent
+
+
+def _maybe_route_style(config: Config, niche: NicheDefinition, page_type: PageType, seed: int):
+    """Return a StyleDirective if style routing is enabled (else None)."""
+    if page_type == PageType.EDIT:
+        return None
+    if not bool(getattr(config.pipeline, "style_routing_enabled", False)):
+        return None
+    try:
+        from titan_factory.style_router import route_style
+
+        return route_style(niche=niche, page_type=page_type, seed=seed)
+    except Exception as e:
+        log_warning(f"Style routing failed; continuing without routing. Error: {e}")
+        return None
 
 # === 100 Niches ===
 # Format: (vertical, pattern, description)
@@ -859,6 +906,7 @@ def generate_task_prompt_packed(
     seed: int,
     is_edit: bool = False,
     code_old: str | None = None,
+    style_directive=None,
 ) -> str:
     pack = str(getattr(config.pipeline, "task_prompt_pack", "niche") or "niche").lower().strip()
 
@@ -894,12 +942,33 @@ def generate_task_prompt_packed(
         log_warning(f"Unknown task_prompt_pack '{pack}', falling back to niche prompts")
         prompt = generate_task_prompt(niche, page_type, seed, is_edit=is_edit, code_old=code_old)
 
-    # Add deterministic palette hint (helps avoid repeated “green/white” defaults without forcing a color).
+    # Add deterministic palette hint (helps reduce repeated default palettes without forcing a color).
     if "Palette seed:" not in prompt:
         prompt = (
             prompt.rstrip()
             + "\n\n"
-            + f"Palette seed: {seed} (use this to vary the palette across tasks; avoid always defaulting to green/teal)"
+            + f"Palette seed: {seed} (use this to vary the palette across tasks; avoid always defaulting to violet/indigo)"
+        )
+
+    # Optional: deterministic style routing block (first-class constraint).
+    if not is_edit and "STYLE ROUTING (HARD CONSTRAINTS" not in prompt:
+        if style_directive is not None:
+            prompt = prompt.rstrip() + "\n\n" + style_directive.to_prompt_block()
+
+    # Force deterministic mood/accent selection (non-edit tasks only) to prevent the planner
+    # from collapsing onto the same palette across many tasks.
+    if not is_edit and "brand.accent:" not in prompt and "brand.mood:" not in prompt:
+        mood, accent = (
+            (style_directive.mood, style_directive.accent)
+            if style_directive is not None
+            else _deterministic_brand_theme(seed, niche)
+        )
+        prompt = (
+            prompt.rstrip()
+            + "\n\n"
+            + "Theme override (must follow exactly):\n"
+            + f"brand.mood: {mood}\n"
+            + f"brand.accent: {accent}"
         )
 
     # Add a deterministic creative-risk dial without forcing a specific style.
@@ -992,7 +1061,20 @@ def generate_tasks(config: Config) -> Iterator[Task]:
                 f"{niche.id}:{page_type.value}:{seed}".encode()
             ).hexdigest()[:16]
 
-            prompt = generate_task_prompt_packed(config, niche, page_type, seed)
+            style_directive = _maybe_route_style(config, niche, page_type, seed)
+            prompt = generate_task_prompt_packed(
+                config,
+                niche,
+                page_type,
+                seed,
+                style_directive=style_directive,
+            )
+            # Record deterministic routing metadata for observability.
+            if style_directive is not None:
+                theme_mood = style_directive.mood
+                theme_accent = style_directive.accent
+            else:
+                theme_mood, theme_accent = _deterministic_brand_theme(seed, niche)
 
             yield Task(
                 id=task_id,
@@ -1001,6 +1083,15 @@ def generate_tasks(config: Config) -> Iterator[Task]:
                 seed=seed,
                 prompt=prompt,
                 is_edit=False,
+                style_family=getattr(style_directive, "family", None) if style_directive else None,
+                style_persona=getattr(style_directive, "persona", None) if style_directive else None,
+                style_keywords_mandatory=getattr(style_directive, "keywords_mandatory", []) if style_directive else [],
+                style_avoid=getattr(style_directive, "avoid", []) if style_directive else [],
+                style_density=getattr(style_directive, "density", None) if style_directive else None,
+                style_imagery_style=getattr(style_directive, "imagery_style", None) if style_directive else None,
+                style_layout_motif=getattr(style_directive, "layout_motif", None) if style_directive else None,
+                theme_mood=theme_mood,
+                theme_accent=theme_accent,
             )
 
         # NOTE: Edit tasks are generated dynamically by the orchestrator
@@ -1023,8 +1114,11 @@ def save_niches(config: Config) -> Path:
 
     config.prompts_path.mkdir(parents=True, exist_ok=True)
 
-    with open(output_path, "w") as f:
+    # Atomically write to avoid corruption when multiple pipeline processes run in parallel.
+    tmp_path = output_path.with_name(f"{output_path.name}.tmp.{os.getpid()}")
+    with open(tmp_path, "w") as f:
         json.dump([n.model_dump() for n in niches], f, indent=2)
+    os.replace(tmp_path, output_path)
 
     log_info(f"Saved {len(niches)} niches to {output_path}")
     return output_path
@@ -1043,10 +1137,13 @@ def save_tasks(config: Config) -> tuple[Path, int]:
     config.prompts_path.mkdir(parents=True, exist_ok=True)
 
     count = 0
-    with open(output_path, "w") as f:
+    # Atomically write to avoid corruption when multiple pipeline processes run in parallel.
+    tmp_path = output_path.with_name(f"{output_path.name}.tmp.{os.getpid()}")
+    with open(tmp_path, "w") as f:
         for task in generate_tasks(config):
             f.write(json.dumps(task.model_dump()) + "\n")
             count += 1
+    os.replace(tmp_path, output_path)
 
     log_info(f"Saved {count} tasks to {output_path}")
     return output_path, count

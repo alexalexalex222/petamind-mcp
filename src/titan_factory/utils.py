@@ -7,6 +7,9 @@ import os
 import re
 import signal
 import socket
+import threading
+import sys
+from datetime import datetime, timezone
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, AsyncGenerator
@@ -14,6 +17,49 @@ from typing import Any, AsyncGenerator
 from rich.console import Console
 
 console = Console()
+
+_RUN_LOG_PATH: Path | None = None
+_RUN_LOG_LOCK = threading.Lock()
+
+
+def set_run_log_file(path: Path | None, *, append: bool = True) -> None:
+    """Enable/disable writing plain-text logs to a run-local file (e.g. out/<run>/run.log).
+
+    This keeps rich console output for humans while also persisting a stable log file
+    that the HTML portal can fetch and display.
+
+    Args:
+        path: Log file path, or None to disable.
+        append: If False, truncate/overwrite the file.
+    """
+    global _RUN_LOG_PATH
+    _RUN_LOG_PATH = path
+    if _RUN_LOG_PATH is None:
+        return
+
+    try:
+        _RUN_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        if not append:
+            _RUN_LOG_PATH.write_text("", encoding="utf-8")
+    except Exception:
+        # Logging must never crash the pipeline.
+        _RUN_LOG_PATH = None
+
+
+def _write_run_log(level: str, msg: str) -> None:
+    """Best-effort append of a single line to the run log file."""
+    if _RUN_LOG_PATH is None:
+        return
+
+    try:
+        ts = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        line = f"{ts} {level} {msg}\n"
+        with _RUN_LOG_LOCK:
+            with open(_RUN_LOG_PATH, "a", encoding="utf-8") as f:
+                f.write(line)
+    except Exception:
+        # Never crash pipeline due to log IO.
+        return
 
 
 def generate_task_id(niche_id: str, page_type: str, seed: int) -> str:
@@ -31,7 +77,14 @@ def generate_task_id(niche_id: str, page_type: str, seed: int) -> str:
     return hashlib.sha256(content.encode()).hexdigest()[:16]
 
 
-def generate_candidate_id(task_id: str, model: str, variant: int, prompt_id: str | None = None) -> str:
+def generate_candidate_id(
+    task_id: str,
+    model: str,
+    variant: int,
+    prompt_id: str | None = None,
+    *,
+    generator_key: str | None = None,
+) -> str:
     """Generate a candidate ID.
 
     Args:
@@ -39,14 +92,19 @@ def generate_candidate_id(task_id: str, model: str, variant: int, prompt_id: str
         model: Generator model name
         variant: Variant index
         prompt_id: Optional prompt variant identifier
+        generator_key: Optional generator instance key (e.g. temperature bucket) to
+            avoid ID collisions when the same model appears multiple times in config.
 
     Returns:
         Candidate ID
     """
+    parts: list[str] = [task_id, model]
+    if generator_key:
+        parts.append(generator_key)
     if prompt_id:
-        content = f"{task_id}:{model}:{prompt_id}:{variant}"
-    else:
-        content = f"{task_id}:{model}:{variant}"
+        parts.append(prompt_id)
+    parts.append(str(variant))
+    content = ":".join(parts)
     return hashlib.sha256(content.encode()).hexdigest()[:12]
 
 
@@ -97,11 +155,54 @@ def extract_json(text: str | None) -> dict[str, Any] | None:
         if first_brace != -1:
             text = text[first_brace:]
 
+    def _sanitize_json_fragment(fragment: str) -> str:
+        """Fix common model JSON issues deterministically.
+
+        Models sometimes emit invalid JSON by inserting raw newlines/tabs inside
+        quoted string literals, e.g.:
+
+          {"notes":"line 1
+          line 2"}
+
+        JSON strings cannot contain raw control characters, so json.loads fails.
+        This sanitizer replaces raw control chars *inside strings* with spaces.
+        """
+        out: list[str] = []
+        in_str = False
+        escaped = False
+
+        for ch in fragment:
+            if escaped:
+                out.append(ch)
+                escaped = False
+                continue
+
+            if ch == "\\":
+                out.append(ch)
+                escaped = True
+                continue
+
+            if ch == '"':
+                out.append(ch)
+                in_str = not in_str
+                continue
+
+            if in_str and ch in ("\n", "\r", "\t"):
+                out.append(" ")
+                continue
+
+            out.append(ch)
+
+        return "".join(out)
+
     # Strategy 1: Direct parse
     try:
         return json.loads(text)
     except json.JSONDecodeError:
-        pass
+        try:
+            return json.loads(_sanitize_json_fragment(text))
+        except json.JSONDecodeError:
+            pass
 
     # Strategy 2: Try ALL code blocks, not just the first (Fix B from GPT-5.2 Pro)
     # Some models emit multiple fenced blocks - we want the first one that parses
@@ -110,7 +211,10 @@ def extract_json(text: str | None) -> dict[str, Any] | None:
         try:
             return json.loads(block)
         except json.JSONDecodeError:
-            continue
+            try:
+                return json.loads(_sanitize_json_fragment(block))
+            except json.JSONDecodeError:
+                continue
 
     # Strategy 3: Find first { and last }
     first_brace = text.find("{")
@@ -118,7 +222,11 @@ def extract_json(text: str | None) -> dict[str, Any] | None:
 
     if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
         try:
-            return json.loads(text[first_brace : last_brace + 1])
+            fragment = text[first_brace : last_brace + 1]
+            try:
+                return json.loads(fragment)
+            except json.JSONDecodeError:
+                return json.loads(_sanitize_json_fragment(fragment))
         except json.JSONDecodeError:
             pass
 
@@ -128,7 +236,11 @@ def extract_json(text: str | None) -> dict[str, Any] | None:
 
     if first_bracket != -1 and last_bracket != -1 and last_bracket > first_bracket:
         try:
-            return json.loads(text[first_bracket : last_bracket + 1])
+            fragment = text[first_bracket : last_bracket + 1]
+            try:
+                return json.loads(fragment)
+            except json.JSONDecodeError:
+                return json.loads(_sanitize_json_fragment(fragment))
         except json.JSONDecodeError:
             pass
 
@@ -335,18 +447,35 @@ def ensure_dir(path: Path) -> Path:
 def log_info(msg: str) -> None:
     """Log info message."""
     console.print(f"[blue]INFO[/blue] {msg}")
+    _write_run_log("INFO", msg)
 
 
 def log_success(msg: str) -> None:
     """Log success message."""
     console.print(f"[green]OK[/green] {msg}")
+    _write_run_log("OK", msg)
 
 
 def log_warning(msg: str) -> None:
     """Log warning message."""
     console.print(f"[yellow]WARN[/yellow] {msg}")
+    _write_run_log("WARN", msg)
 
 
 def log_error(msg: str) -> None:
     """Log error message."""
     console.print(f"[red]ERROR[/red] {msg}")
+    _write_run_log("ERROR", msg)
+
+
+def ensure_console_to_stderr() -> None:
+    """Force Rich console output to stderr.
+
+    MCP stdio servers must keep stdout clean (JSON-RPC only). Some Titan utilities
+    log via Rich; this helper ensures those logs don't corrupt stdio transport.
+    """
+    try:
+        console.file = sys.stderr
+    except Exception:
+        # Never crash due to logging reconfiguration.
+        return

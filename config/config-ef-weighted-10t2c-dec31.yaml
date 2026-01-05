@@ -1,0 +1,104 @@
+# Fix E validation run (weighted selection) — Dec 31, 2025
+#
+# Purpose:
+# - Non-skip_judge run so winner selection uses `_select_winner()`
+# - Task concurrency=2, total tasks=10
+# - Use ONLY Vertex providers (no OpenRouter, no Gemini API-key spend)
+# - Disable refinement to isolate winner selection behavior
+#
+# Run:
+#   .venv/bin/python -m titan_factory.cli run --max-tasks 10 --run-id ef-weighted-10t2c-dec31 -c config/config-ef-weighted-10t2c-dec31.yaml
+
+models:
+  planner:
+    provider: vertex
+    model: deepseek-ai/deepseek-v3.2-maas
+    publishable: true
+    max_tokens: 2000
+    temperature: 0.6
+
+  # 2 generators × 2 variants = 4 candidates per task (enough to see selection differences)
+  ui_generators:
+    - provider: vertex
+      model: moonshotai/kimi-k2-thinking-maas
+      publishable: true
+      variants: 2
+      max_tokens: 65000
+      temperature: 0.8
+    - provider: vertex
+      model: minimaxai/minimax-m2-maas
+      publishable: true
+      variants: 2
+      max_tokens: 65000
+      temperature: 0.8
+
+  # Build-fix patcher
+  patcher:
+    provider: vertex
+    model: deepseek-ai/deepseek-v3.2-maas
+    publishable: true
+    max_tokens: 5000
+    temperature: 0.2
+
+  # Vision judge on Vertex (multimodal) — avoids GEMINI_API_KEY charges
+  vision_judge:
+    provider: anthropic_vertex
+    model: claude-haiku-4-5@20251001
+    publishable: false
+    max_tokens: 2000
+    temperature: 0.1
+
+pipeline:
+  skip_judge: false
+  # Accept anything that scores (we're testing selection behavior, not filtering)
+  vision_score_threshold: 0.0
+
+  # Fix E weights
+  selection:
+    judge_weight: 0.6
+    creativity_weight: 0.4
+
+  # Disable refinement to isolate selection differences
+  refinement_enabled: false
+  creative_director_mode: false
+  megamind_enabled: false
+  polish_loop_enabled: false
+  generate_edit_tasks: false
+
+  # Keep deterministic gates off for speed (selection test only)
+  deterministic_gates_enabled: false
+  deterministic_gates_enforce: false
+
+  # LANDING only
+  page_type_filter: ["landing"]
+  tasks_per_niche: 1
+  total_niches: 100
+  shuffle_tasks: true
+  task_shuffle_seed: 1337
+
+  model_timeout_ms: 150000
+  build_timeout_ms: 240000
+  render_timeout_ms: 120000
+
+budget:
+  task_concurrency: 2
+  concurrency_vertex: 6
+  concurrency_build: 2
+  concurrency_render: 1
+  requests_per_min_vertex: 60
+  max_total_tasks: null
+  stop_after_usd: null
+
+export:
+  holdout_niches: 0
+  validation_split: 0.0
+  holdout_niche_ids: []
+
+gcs:
+  bucket: null
+  prefix: titan-factory-outputs
+  upload_interval_tasks: 50
+
+vertex:
+  endpoint_template: "https://{region}-aiplatform.googleapis.com/v1/projects/{project}/locations/{region}/endpoints/openapi/chat/completions"
+

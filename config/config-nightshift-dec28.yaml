@@ -1,0 +1,111 @@
+# Night Shift Throughput Config (Dec 28, 2025)
+#
+# Goal: Complete Phase 0 Track B end-to-end with high throughput and deterministic gates recorded.
+# Policy: keep deterministic gates in OBSERVE mode (enforce=false) to avoid killing throughput.
+
+models:
+  # Planner (UI_SPEC)
+  planner:
+    provider: vertex
+    model: deepseek-ai/deepseek-v3.2-maas
+    publishable: true
+    max_tokens: 2000
+    temperature: 0.6
+
+  # UI Generators (keep variants low for speed/cost)
+  ui_generators:
+    - provider: vertex
+      model: moonshotai/kimi-k2-thinking-maas
+      publishable: true
+      variants: 1
+      max_tokens: 65000
+      temperature: 0.8
+    - provider: vertex
+      model: minimaxai/minimax-m2-maas
+      publishable: true
+      variants: 1
+      max_tokens: 65000
+      temperature: 0.8
+
+  # Patcher (build fixes)
+  patcher:
+    # Vertex-only: do NOT use OpenRouter (no credits).
+    provider: vertex
+    model: deepseek-ai/deepseek-v3.2-maas
+    publishable: true
+    max_tokens: 16000
+    temperature: 0.2
+
+  # Vision Judge (kept for compatibility, but skipped via pipeline.skip_judge)
+  vision_judge:
+    provider: gemini
+    # skip_judge=true, so we explicitly disable the vision model to prevent any Gemini calls.
+    model: null
+    publishable: false
+    max_tokens: 2000
+    temperature: 0.1
+
+pipeline:
+  # Skip subjective vision judging for throughput (deterministic gates still run during render)
+  skip_judge: true
+
+  # Deterministic gates (record always; enforce only when tuned)
+  deterministic_gates_enabled: true
+  deterministic_gates_enforce: false
+
+  axe_gate_enabled: true
+  axe_fail_impacts: ["critical"]
+  axe_timeout_ms: 60000
+
+  lighthouse_gate_enabled: true
+  lighthouse_preset: desktop
+  lighthouse_timeout_ms: 180000
+
+  # Keep thresholds moderate; composite scoring is computed separately in SQL.
+  lighthouse_min_scores:
+    performance: 0.35
+    accessibility: 0.70
+    best_practices: 0.70
+    seo: 0.60
+
+  # Disable expensive planning/refinement loops for throughput
+  megamind_enabled: false
+  refinement_enabled: false
+  creative_director_mode: false
+
+  # Fix loops
+  max_fix_rounds: 2
+
+  # Keep extra polish loops off (saves time/cost)
+  polish_loop_enabled: false
+  generate_edit_tasks: false
+
+  # Core run settings
+  tasks_per_niche: 7
+  total_niches: 100
+  model_timeout_ms: 120000
+  build_timeout_ms: 240000
+  render_timeout_ms: 90000
+
+budget:
+  task_concurrency: 5
+  concurrency_vertex: 10
+  concurrency_gemini: 1
+  concurrency_build: 5
+  concurrency_render: 2
+  requests_per_min_vertex: 60
+  max_total_tasks: null
+  stop_after_usd: null
+
+export:
+  holdout_niches: 12
+  validation_split: 0.08
+  holdout_niche_ids: []
+
+gcs:
+  bucket: null
+  prefix: titan-factory-outputs
+  upload_interval_tasks: 50
+
+vertex:
+  endpoint_template: "https://{region}-aiplatform.googleapis.com/v1/projects/{project}/locations/{region}/endpoints/openapi/chat/completions"

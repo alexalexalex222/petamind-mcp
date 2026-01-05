@@ -6,47 +6,102 @@ models:
     provider: vertex
     model: deepseek-ai/deepseek-v3.2-maas
     publishable: true
-    max_tokens: 2000
+    max_tokens: 65000
     temperature: 0.7
 
   # Stage 2: UI Generators (generate code candidates)
   # Note: Thinking models need extra tokens for <think> blocks + code
-  # Fix D from GPT-5.2 Pro: Increased from 8000 to 12000 to prevent truncation
+  # INCREASED to 32k for FULL landing pages (hero + features + pricing + FAQ + footer)
+  # Kimi K2 supports 32k output, MiniMax M2 supports similar
   ui_generators:
+    # Multi-temperature spread for diversity.
+    #
+    # NOTE: Candidate count per task = sum(variants for each entry).
+    # Current spread:
+    # - Kimi: 4 temps × 1 variant = 4 candidates
+    # - MiniMax: 4 temps × 1 variant = 4 candidates
+    # Total = 8 candidates per task (keeps throughput sane while still spanning temps).
+
+    # === Kimi K2: conservative → balanced → creative → bold ===
     - provider: vertex
       model: moonshotai/kimi-k2-thinking-maas
       publishable: true
-      variants: 4
-      max_tokens: 12000
-      temperature: 0.8
+      variants: 1
+      max_tokens: 65000
+      temperature: 0.70
+
+    - provider: vertex
+      model: moonshotai/kimi-k2-thinking-maas
+      publishable: true
+      variants: 1
+      max_tokens: 65000
+      temperature: 0.85
+
+    - provider: vertex
+      model: moonshotai/kimi-k2-thinking-maas
+      publishable: true
+      variants: 1
+      max_tokens: 65000
+      temperature: 1.00
+
+    - provider: vertex
+      model: moonshotai/kimi-k2-thinking-maas
+      publishable: true
+      variants: 1
+      max_tokens: 65000
+      temperature: 1.15
+
+    # === MiniMax M2: include the same 4 temp points ===
     - provider: vertex
       model: minimaxai/minimax-m2-maas
       publishable: true
-      variants: 4
-      max_tokens: 12000
-      temperature: 0.8
-    # Optional: Add more generators
-    # - provider: openrouter
-    #   model: some-model
-    #   publishable: false
-    #   variants: 1
+      variants: 1
+      max_tokens: 65000
+      temperature: 0.70
+
+    - provider: vertex
+      model: minimaxai/minimax-m2-maas
+      publishable: true
+      variants: 1
+      max_tokens: 65000
+      temperature: 0.85
+
+    - provider: vertex
+      model: minimaxai/minimax-m2-maas
+      publishable: true
+      variants: 1
+      max_tokens: 65000
+      temperature: 1.00
+
+    - provider: vertex
+      model: minimaxai/minimax-m2-maas
+      publishable: true
+      variants: 1
+      max_tokens: 65000
+      temperature: 1.15
+    # NOTE: GLM-4.7 and MiniMax M2.1 are NOT on Vertex AI MaaS yet
+    # Only available: Kimi K2, MiniMax M2, DeepSeek V3.2
 
   # Stage 3: Patcher/Fixer (fixes build errors)
   patcher:
-    provider: openrouter
-    model: mistralai/devstral-2512:free
+    # Vertex-only: do NOT use OpenRouter (no credits).
+    provider: vertex
+    model: deepseek-ai/deepseek-v3.2-maas
     publishable: true
-    max_tokens: 8000
+    max_tokens: 65000
     temperature: 0.3
 
   # Vision Judge (scores screenshots - NOT used for training)
   # Uses Gemini native API for multimodal vision capabilities
   vision_judge:
     provider: gemini
-    model: gemini-3-flash-preview
+    # Prefer the stable Gemini 3 Flash name; the code will fall back to preview if not available
+    # in this Vertex project.
+    model: gemini-3.0-flash
     publishable: false
-    max_tokens: 2000
+    max_tokens: 65000
     temperature: 0.7
+    force_adc: true
 
   # Refinement Loop Models (quality improvement based on vision feedback)
   # These are DIFFERENT from patcher - patcher fixes build errors,
@@ -57,7 +112,7 @@ models:
     provider: vertex
     model: deepseek-ai/deepseek-v3.2-maas
     publishable: true
-    max_tokens: 2000
+    max_tokens: 65000
     temperature: 0.5
 
   # Refine Coder: Applies visual/UX fixes (needs strong coding model)
@@ -65,12 +120,75 @@ models:
     provider: vertex
     model: moonshotai/kimi-k2-thinking-maas
     publishable: true
-    max_tokens: 12000
+    max_tokens: 65000  # Match ui_generators for full rewrites
+    temperature: 0.7
+
+  # Megamind models (avoid homogeneity: do not fall back to planner for every sub-reasoner)
+  megamind_bold:
+    provider: vertex
+    model: moonshotai/kimi-k2-thinking-maas
+    publishable: true
+    max_tokens: 65000
+    temperature: 0.9
+
+  megamind_minimal:
+    provider: vertex
+    model: minimaxai/minimax-m2-maas
+    publishable: true
+    max_tokens: 65000
+    temperature: 0.8
+
+  megamind_safe:
+    provider: vertex
+    model: deepseek-ai/deepseek-v3.2-maas
+    publishable: true
+    max_tokens: 65000
+    temperature: 0.7
+
+  megamind_synthesizer:
+    provider: vertex
+    model: deepseek-ai/deepseek-v3.2-maas
+    publishable: true
+    max_tokens: 65000
     temperature: 0.7
 
 pipeline:
   # Scoring threshold (0-10)
   vision_score_threshold: 8.0
+
+  # Allow generator temps > 1.0 (hard-clamped in uigen to this cap).
+  generator_temp_cap: 1.3
+
+  # === WINNER SELECTION (Fix E) ===
+  # Blend judge score (0-10) with section creativity (0-1) so that distinctive
+  # candidates can win when judge scores are close.
+  selection:
+    # Creativity is the north star: pick the most distinctive candidate once shippable is satisfied.
+    # "creativity_first" ignores weights for ordering, but keep weights for logging/compat.
+    mode: creativity_first
+    judge_weight: 0.4
+    creativity_weight: 0.6
+
+  # === CREATIVITY GATE (north star) ===
+  # Keep in observe mode by default (enforce=false) so throughput isn't destroyed while we tune prompts.
+  creativity_gate:
+    enabled: true
+    min_avg: 0.7
+    enforce: false
+
+  # === MEGAMIND 3-PASS REASONING ===
+  # When enabled, uses 3 parallel sub-reasoners (bold/minimal/safe) to generate plans,
+  # then synthesizes them into a unified best-of-3 plan before UI generation.
+  # This increases plan diversity and quality at the cost of 4x planner API calls.
+  megamind_enabled: true
+  megamind_v2_enabled: true
+
+  # === STYLE ROUTING + EVOL (prevent monoculture) ===
+  style_routing_enabled: true
+  style_gates_enabled: true
+  style_gates_enforce: false
+  evol_enabled: true
+  evol_passes: 2
 
   # === CREATIVE DIRECTOR MODE ===
   # When enabled, replaces numeric scoring with qualitative feedback.
@@ -78,14 +196,26 @@ pipeline:
   # on production readiness rather than aesthetic preferences.
   # Refinement is guided by specific feedback (missing_for_production)
   # rather than score thresholds.
-  creative_director_mode: true
+  creative_director_mode: false
 
   # === REFINEMENT LOOP THRESHOLDS ===
   # Only used when creative_director_mode is false
   refinement_enabled: true
-  refine_pass2_threshold: 9.5   # Refine if score < 9.5
-  refine_pass3_threshold: 9.5   # Refine again if score < 9.5
+  # Don't over-polish: high thresholds tend to normalize creativity.
+  refine_pass2_threshold: 7.0   # Refine if score < 7.0
+  refine_pass3_threshold: 8.0   # Refine again if score < 8.0
   max_refine_passes: 2
+
+  # === REFINEMENT SKIP POLICY (Fix F) ===
+  # Refinement tends to normalize distinctive layouts. If deterministic gates pass
+  # AND section creativity is high, skip refinement to preserve creative intent.
+  refinement:
+    skip_for_high_creativity: true
+    creativity_skip_threshold: 0.7
+
+  # === BROKEN VISION GATE (blank/error pages) ===
+  broken_vision_gate_enabled: true
+  broken_vision_gate_min_confidence: 0.85
 
   # Max fix attempts per candidate
   max_fix_rounds: 2
@@ -104,14 +234,31 @@ pipeline:
   build_timeout_ms: 240000
   render_timeout_ms: 90000
 
+  # === DETERMINISTIC QUALITY GATES (AXE + LIGHTHOUSE) ===
+  # Runs measurable validation before subjective vision judging.
+  deterministic_gates_enabled: true
+  # Start in "observe" mode; flip true once thresholds are tuned.
+  deterministic_gates_enforce: false
+
+  axe_gate_enabled: true
+  axe_fail_impacts: ["critical"]
+  axe_timeout_ms: 60000
+
+  lighthouse_gate_enabled: true
+  lighthouse_preset: desktop
+  lighthouse_timeout_ms: 180000
+  lighthouse_min_scores:
+    performance: 0.35
+    accessibility: 0.70
+    best_practices: 0.70
+    seo: 0.60
+
 budget:
   # Concurrent requests per provider
   concurrency_vertex: 5
-  concurrency_openrouter: 10
 
   # Rate limits (requests per minute)
   requests_per_min_vertex: 60
-  requests_per_min_openrouter: 100
 
   # Optional limits
   max_total_tasks: null  # null = run all tasks
@@ -136,7 +283,3 @@ gcs:
 # Vertex AI configuration
 vertex:
   endpoint_template: "https://{region}-aiplatform.googleapis.com/v1/projects/{project}/locations/{region}/endpoints/openapi/chat/completions"
-
-# OpenRouter configuration
-openrouter:
-  base_url: "https://openrouter.ai/api/v1/chat/completions"

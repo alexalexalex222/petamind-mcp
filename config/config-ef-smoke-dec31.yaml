@@ -1,0 +1,109 @@
+# Smoke config for validating Fix E + Fix F (Dec 31, 2025)
+#
+# Purpose:
+# - Exercise non-skip_judge winner selection (Fix E)
+# - Exercise refinement skip policy (Fix F) without actually running refiners
+# - Record deterministic gates + section creativity in manifest.db
+#
+# Usage:
+#   .venv/bin/python -m titan_factory.cli run --max-tasks 1 --run-id ef-smoke-dec31 -c config/config-ef-smoke-dec31.yaml
+#
+# Notes:
+# - Deterministic gates are configured to be permissive for this smoke test so that
+#   `deterministic_passed` is likely true and Fix F is observable in logs.
+
+models:
+  planner:
+    provider: vertex
+    model: deepseek-ai/deepseek-v3.2-maas
+    publishable: true
+    max_tokens: 2000
+    temperature: 0.6
+
+  ui_generators:
+    - provider: vertex
+      model: moonshotai/kimi-k2-thinking-maas
+      publishable: true
+      variants: 1
+      max_tokens: 65000
+      temperature: 0.85
+
+  patcher:
+    provider: vertex
+    model: deepseek-ai/deepseek-v3.2-maas
+    publishable: true
+    max_tokens: 16000
+    temperature: 0.2
+
+  vision_judge:
+    provider: gemini
+    model: gemini-3-flash-preview
+    publishable: false
+    max_tokens: 2000
+    temperature: 0.1
+
+pipeline:
+  skip_judge: false
+  vision_score_threshold: 0.0
+
+  # Deterministic gates (permissive for smoke)
+  deterministic_gates_enabled: true
+  deterministic_gates_enforce: false
+  axe_gate_enabled: true
+  axe_fail_impacts: []  # never fail on axe in this smoke; we only want recording
+  lighthouse_gate_enabled: false
+
+  # Fix E weights (defaults also exist in code)
+  selection:
+    judge_weight: 0.6
+    creativity_weight: 0.4
+
+  # Fix F skip policy (force observable behavior)
+  refinement_enabled: true
+  refine_pass2_threshold: 99.0
+  refine_pass3_threshold: 99.0
+  max_refine_passes: 2
+  refinement:
+    skip_for_high_creativity: true
+    creativity_skip_threshold: 0.0
+
+  # Keep other loops off
+  megamind_enabled: false
+  creative_director_mode: false
+  polish_loop_enabled: false
+  generate_edit_tasks: false
+
+  # Keep task universe small
+  page_type_filter: ["landing"]
+  tasks_per_niche: 1
+  total_niches: 2
+  shuffle_tasks: true
+  task_shuffle_seed: 1337
+
+  model_timeout_ms: 150000
+  build_timeout_ms: 240000
+  render_timeout_ms: 120000
+
+budget:
+  task_concurrency: 1
+  concurrency_vertex: 4
+  concurrency_gemini: 2
+  concurrency_build: 2
+  concurrency_render: 1
+  requests_per_min_vertex: 60
+  max_total_tasks: null
+  stop_after_usd: null
+
+export:
+  holdout_niches: 0
+  validation_split: 0.0
+  holdout_niche_ids: []
+
+gcs:
+  bucket: null
+  prefix: titan-factory-outputs
+  upload_interval_tasks: 50
+
+vertex:
+  endpoint_template: "https://{region}-aiplatform.googleapis.com/v1/projects/{project}/locations/{region}/endpoints/openapi/chat/completions"
+

@@ -1,0 +1,140 @@
+# Production Config (Creative Risk + Stacked TITAN prompt + Qwen patcher) - Dec 30, 2025
+#
+# Purpose:
+# - Preserve the "creative risk" workflow (promptgen injects Creative risk dial)
+# - Avoid generic/default aesthetics by using the stacked TITAN_UI system prompt
+# - Keep deterministic gates recorded (axe + Lighthouse) while skipping subjective vision judging
+# - Use Vertex MaaS only (NO OpenRouter)
+#
+# Usage (example 50 tasks):
+#   .venv/bin/python -m titan_factory.cli run --max-tasks 50 --run-id prod-creativerisk-qwen-dec30 -c config/config-prod-creativerisk-qwen-dec30.yaml
+#
+# Notes:
+# - Color collapse fix: promptgen injects deterministic `brand.mood` + `brand.accent` lines now.
+# - This config stacks the built-in UIGEN prompt with prompts/titan_ui_system_long.txt for higher quality.
+
+models:
+  planner:
+    provider: vertex
+    model: deepseek-ai/deepseek-v3.2-maas
+    publishable: true
+    max_tokens: 2000
+    temperature: 0.6
+
+  ui_generators:
+    - provider: vertex
+      model: moonshotai/kimi-k2-thinking-maas
+      publishable: true
+      variants: 1
+      max_tokens: 65000
+      temperature: 0.95
+    - provider: vertex
+      model: minimaxai/minimax-m2-maas
+      publishable: true
+      variants: 1
+      max_tokens: 65000
+      temperature: 0.95
+
+  patcher:
+    provider: vertex
+    model: qwen/qwen3-coder-480b-a35b-instruct-maas
+    publishable: true
+    max_tokens: 20000
+    temperature: 0.2
+
+  vision_judge:
+    provider: gemini
+    # Use ADC/Vertex so we spend GCP credits, not API-key billing.
+    # Prefer stable Gemini 3 Flash; judge.py falls back to preview if needed.
+    model: gemini-3.0-flash
+    publishable: false
+    max_tokens: 65000
+    temperature: 0.7
+    force_adc: true
+
+pipeline:
+  # Throughput: no subjective vision judging; deterministic gates still run during render.
+  skip_judge: true
+  generate_edit_tasks: false
+
+  # More variety than purely niche/local-business prompts.
+  task_prompt_pack: mixed
+
+  # Stacked mega prompt for UIGEN (built-in rules + TITAN_UI long system prompt).
+  uigen_prompt_variants:
+    - id: stacked_all
+      input_mode: both
+      parts:
+        - source: builtin
+        - source: file
+          path: prompts/titan_ui_system_long.txt
+        - source: inline
+          text: |
+            GLOBAL OVERRIDES (APPLY EVEN IF OTHER PROMPTS CONFLICT):
+            - Output must be STRICT: <think>...</think> followed by ONE valid JSON object.
+            - No emojis in any text. If an icon is needed, use simple inline SVG (keep icons minimal).
+            - Follow the provided brand accent exactly; do not default to violet/purple.
+            - Follow the Creative risk dial; avoid boring/generic layouts; keep UX clear and build-safe.
+
+  # Deterministic gates (record always; enforce only when tuned)
+  deterministic_gates_enabled: true
+  deterministic_gates_enforce: false
+
+  # Discard visually broken renders (blank pages, error overlays, 404s) even if they pass axe/LH.
+  broken_vision_gate_enabled: true
+  broken_vision_gate_min_confidence: 0.85
+
+  # Section-level creativity refinement: improve only weak sections, preserve what works.
+  creativity_refinement_enabled: true
+  creativity_min_section_score: 0.7
+  creativity_max_refinement_passes: 2
+
+  axe_gate_enabled: true
+  axe_fail_impacts: ["critical"]
+  axe_timeout_ms: 60000
+
+  lighthouse_gate_enabled: true
+  lighthouse_preset: desktop
+  lighthouse_timeout_ms: 240000
+
+  lighthouse_min_scores:
+    performance: 0.35
+    accessibility: 0.70
+    best_practices: 0.70
+    seo: 0.60
+
+  # Keep expensive loops off for throughput; creative risk is handled by prompts.
+  megamind_enabled: false
+  refinement_enabled: false
+  creative_director_mode: false
+  polish_loop_enabled: false
+
+  max_fix_rounds: 2
+
+  # Timeouts (milliseconds)
+  model_timeout_ms: 150000
+  build_timeout_ms: 240000
+  render_timeout_ms: 120000
+
+budget:
+  task_concurrency: 5
+  concurrency_vertex: 10
+  concurrency_gemini: 1
+  concurrency_build: 5
+  concurrency_render: 2
+  requests_per_min_vertex: 60
+  max_total_tasks: null
+  stop_after_usd: null
+
+export:
+  holdout_niches: 12
+  validation_split: 0.08
+  holdout_niche_ids: []
+
+gcs:
+  bucket: null
+  prefix: titan-factory-outputs
+  upload_interval_tasks: 50
+
+vertex:
+  endpoint_template: "https://{region}-aiplatform.googleapis.com/v1/projects/{project}/locations/{region}/endpoints/openapi/chat/completions"

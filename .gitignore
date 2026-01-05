@@ -15,6 +15,7 @@ build/
 # Environment
 .env
 .env.local
+.mcp.json
 
 # IDE
 .idea/
@@ -36,3 +37,14 @@ templates/*/out/
 
 # Logs
 *.log
+
+# Local-only / internal artifacts (do not publish)
+private/
+prompts/codex_context/
+context-dump/
+debug-context/
+benchmark-results/
+prompts/codex_creativity_debug.md
+config/*.bak_*
+*.bak_*
+*.head_backup_*

@@ -1,0 +1,131 @@
+# Temp test: 0.80 base generator temp
+
+models:
+  planner:
+    provider: vertex
+    model: deepseek-ai/deepseek-v3.2-maas
+    publishable: true
+    max_tokens: 65000
+    temperature: 0.7
+
+  ui_generators:
+    - provider: vertex
+      model: moonshotai/kimi-k2-thinking-maas
+      publishable: true
+      variants: 4
+      max_tokens: 65000
+      temperature: 0.80
+    - provider: vertex
+      model: minimaxai/minimax-m2-maas
+      publishable: true
+      variants: 4
+      max_tokens: 65000
+      temperature: 0.80
+
+  patcher:
+    provider: vertex
+    model: deepseek-ai/deepseek-v3.2-maas
+    publishable: true
+    max_tokens: 65000
+    temperature: 0.3
+
+  vision_judge:
+    provider: gemini
+    model: gemini-3.0-flash
+    publishable: false
+    max_tokens: 65000
+    temperature: 0.7
+    force_adc: true
+
+  refine_reasoner:
+    provider: vertex
+    model: deepseek-ai/deepseek-v3.2-maas
+    publishable: true
+    max_tokens: 65000
+    temperature: 0.5
+
+  refine_coder:
+    provider: vertex
+    model: moonshotai/kimi-k2-thinking-maas
+    publishable: true
+    max_tokens: 65000
+    temperature: 0.7
+
+pipeline:
+  vision_score_threshold: 8.0
+
+  selection:
+    mode: creativity_first
+    judge_weight: 0.4
+    creativity_weight: 0.6
+
+  creativity_gate:
+    enabled: true
+    min_avg: 0.7
+    enforce: false
+
+  megamind_enabled: true
+  megamind_v2_enabled: true
+  style_routing_enabled: true
+  style_gates_enabled: true
+  style_gates_enforce: false
+  evol_enabled: true
+  evol_passes: 2
+
+  creative_director_mode: false
+  refinement_enabled: true
+  refine_pass2_threshold: 7.0
+  refine_pass3_threshold: 8.0
+  max_refine_passes: 2
+
+  refinement:
+    skip_for_high_creativity: true
+    creativity_skip_threshold: 0.7
+
+  broken_vision_gate_enabled: true
+  broken_vision_gate_min_confidence: 0.85
+
+  max_fix_rounds: 2
+  polish_loop_enabled: true
+
+  tasks_per_niche: 7
+  total_niches: 100
+
+  model_timeout_ms: 120000
+  build_timeout_ms: 240000
+  render_timeout_ms: 90000
+
+  render_port_start: 4400
+
+  deterministic_gates_enabled: true
+  deterministic_gates_enforce: false
+  axe_gate_enabled: true
+  axe_fail_impacts: ["critical"]
+  axe_timeout_ms: 60000
+  lighthouse_gate_enabled: true
+  lighthouse_preset: desktop
+  lighthouse_timeout_ms: 180000
+  lighthouse_min_scores:
+    performance: 0.35
+    accessibility: 0.70
+    best_practices: 0.70
+    seo: 0.60
+
+budget:
+  # Per-process cap; keep low because multiple runs are executing concurrently.
+  concurrency_vertex: 1
+  requests_per_min_vertex: 60
+
+export:
+  holdout_niches: 12
+  validation_split: 0.08
+  holdout_niche_ids: []
+
+gcs:
+  bucket: null
+  prefix: titan-factory-outputs
+  upload_interval_tasks: 50
+
+vertex:
+  endpoint_template: "https://{region}-aiplatform.googleapis.com/v1/projects/{project}/locations/{region}/endpoints/openapi/chat/completions"
+

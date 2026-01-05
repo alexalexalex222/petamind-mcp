@@ -86,21 +86,45 @@ class VertexProvider(LLMProvider):
 
             # Refresh if token expires within 60 seconds
             if self._token is None or current_time >= self._token_expiry - 60:
-                # Get credentials in thread pool (blocking operation)
-                loop = asyncio.get_event_loop()
-                self._credentials, _ = await loop.run_in_executor(
-                    None,
-                    google.auth.default,
-                    ["https://www.googleapis.com/auth/cloud-platform"],
-                )
+                # Get credentials in thread pool (blocking operation).
+                #
+                # NOTE: In real-world runs we've seen intermittent DNS failures resolving
+                # oauth2.googleapis.com during token refresh. Because token refresh is a
+                # shared dependency for *all* Vertex calls, we retry here to avoid
+                # failing whole tasks due to transient network hiccups.
+                loop = asyncio.get_running_loop()
+                last_err: Exception | None = None
 
-                # Refresh token
-                request = google.auth.transport.requests.Request()
-                await loop.run_in_executor(None, self._credentials.refresh, request)
+                for attempt in range(4):
+                    try:
+                        self._credentials, _ = await loop.run_in_executor(
+                            None,
+                            google.auth.default,
+                            ["https://www.googleapis.com/auth/cloud-platform"],
+                        )
 
-                self._token = self._credentials.token
-                # Token expires in ~1 hour, set expiry to 50 minutes
-                self._token_expiry = current_time + 3000
+                        # Refresh token
+                        request = google.auth.transport.requests.Request()
+                        await loop.run_in_executor(None, self._credentials.refresh, request)
+
+                        self._token = self._credentials.token
+                        # Token expires in ~1 hour, set expiry to 50 minutes
+                        self._token_expiry = current_time + 3000
+                        last_err = None
+                        break
+                    except Exception as e:
+                        last_err = e
+                        if attempt < 3:
+                            backoff_s = 1.5 * (2**attempt)
+                            log_warning(
+                                f"Vertex token refresh failed (attempt {attempt + 1}/4): {e}"
+                            )
+                            await asyncio.sleep(backoff_s)
+                            continue
+                        raise
+
+                if last_err is not None:
+                    raise last_err
 
             return self._token
 
@@ -131,6 +155,19 @@ class VertexProvider(LLMProvider):
         """
         async with self._concurrency:
             token = await self._get_token()
+
+            # Vertex MaaS (OpenAI-compatible endpoint) enforces a hard output token limit.
+            # Some upstream stages increase max_tokens on retry (e.g. *1.25 on truncation),
+            # which can accidentally exceed the provider limit and hard-fail the request.
+            #
+            # Keep this clamp centralized so all callers remain safe.
+            vertex_max_output_tokens = 65536
+            if int(max_tokens) > vertex_max_output_tokens:
+                log_warning(
+                    f"VertexProvider: clamping max_tokens from {max_tokens} to {vertex_max_output_tokens} "
+                    f"for model {model}"
+                )
+                max_tokens = vertex_max_output_tokens
 
             headers = {
                 "Authorization": f"Bearer {token}",

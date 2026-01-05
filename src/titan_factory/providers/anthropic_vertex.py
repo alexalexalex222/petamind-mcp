@@ -1,9 +1,10 @@
-"""Anthropic Claude provider on Vertex AI (rawPredict)."""
+"""Anthropic Claude provider on Vertex AI (streamRawPredict)."""
 
 from __future__ import annotations
 
 import asyncio
 import base64
+import json
 import time
 from typing import Any
 
@@ -21,7 +22,9 @@ from .base import CompletionResponse, LLMProvider, Message, ProviderFactory
 class AnthropicVertexProvider(LLMProvider):
     """Provider for Anthropic Claude models on Vertex AI.
 
-    Uses the Vertex rawPredict endpoint with the Anthropic Messages API payload.
+    Uses the Vertex streamRawPredict endpoint with the Anthropic Messages API payload.
+    We send `stream=false` for a single non-streaming response, but also tolerate
+    an event-stream response shape for robustness across Vertex rollouts.
     """
 
     def __init__(self, config: Config) -> None:
@@ -46,22 +49,49 @@ class AnthropicVertexProvider(LLMProvider):
 
         region = self.region or "global"
         if region != "global":
-            # Anthropic models are typically served from global.
+            # Do not override user intent; just warn (some Anthropic models may only be available in global).
             log_warning(
-                f"Anthropic Vertex models typically use region 'global'; "
-                f"overriding configured region '{region}'"
+                "Anthropic Vertex models are often served from location 'global'. "
+                f"If you see 404/permission errors, try GOOGLE_CLOUD_REGION=global (got '{region}')."
             )
-            region = "global"
 
         if region == "global":
             base = "https://aiplatform.googleapis.com"
+            location = "global"
         else:
             base = f"https://{region}-aiplatform.googleapis.com"
+            location = region
 
         return (
-            f"{base}/v1/projects/{self.project}/locations/{region}/"
-            f"{model_path}:rawPredict"
+            f"{base}/v1/projects/{self.project}/locations/{location}/"
+            f"{model_path}:streamRawPredict"
         )
+
+    def _parse_response_json(self, response: httpx.Response) -> dict[str, Any]:
+        """Parse Vertex responses from either JSON or SSE event-stream."""
+        try:
+            return response.json()
+        except Exception:
+            pass
+
+        # Tolerate SSE-style responses (data: {json}).
+        text = (response.text or "").strip()
+        last_obj: dict[str, Any] | None = None
+        for line in text.splitlines():
+            if not line.startswith("data:"):
+                continue
+            payload = line[len("data:") :].strip()
+            if not payload or payload == "[DONE]":
+                continue
+            try:
+                obj = json.loads(payload)
+            except Exception:
+                continue
+            if isinstance(obj, dict):
+                last_obj = obj
+        if last_obj is None:
+            raise RuntimeError("Failed to parse Vertex response as JSON or SSE event-stream")
+        return last_obj
 
     async def _get_token(self) -> str:
         """Get a valid access token."""
@@ -170,6 +200,7 @@ class AnthropicVertexProvider(LLMProvider):
                 "messages": anthropic_messages,
                 "max_tokens": max_tokens,
                 "temperature": temperature,
+                "stream": False,
             }
             if system:
                 payload["system"] = system
@@ -186,7 +217,7 @@ class AnthropicVertexProvider(LLMProvider):
                     f"{response.text[:500]}"
                 )
 
-            data = response.json()
+            data = self._parse_response_json(response)
             payload = self._extract_payload(data)
             content = self._extract_text_from_payload(payload)
             finish_reason = payload.get("stop_reason")
@@ -256,6 +287,7 @@ class AnthropicVertexProvider(LLMProvider):
                 "messages": anthropic_messages,
                 "max_tokens": max_tokens,
                 "temperature": temperature,
+                "stream": False,
             }
             if system:
                 payload["system"] = system
@@ -272,7 +304,7 @@ class AnthropicVertexProvider(LLMProvider):
                     f"{response.text[:500]}"
                 )
 
-            data = response.json()
+            data = self._parse_response_json(response)
             payload = self._extract_payload(data)
             content = self._extract_text_from_payload(payload)
             finish_reason = payload.get("stop_reason")

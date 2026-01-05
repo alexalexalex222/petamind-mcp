@@ -17,13 +17,13 @@ models:
       model: deepseek/deepseek-chat
       publishable: true
       variants: 2
-      max_tokens: 12000
+      max_tokens: 65000
       temperature: 0.8
     - provider: openrouter
       model: qwen/qwen-2.5-coder-32b-instruct
       publishable: true
       variants: 2
-      max_tokens: 12000
+      max_tokens: 65000
       temperature: 0.8
 
   # Stage 3: Patcher/Fixer (fixes build errors)
@@ -38,7 +38,7 @@ models:
   # Uses Gemini API directly (GEMINI_API_KEY is set)
   vision_judge:
     provider: gemini
-    model: gemini-2.0-flash
+    model: gemini-3-flash
     publishable: false
     max_tokens: 4000
     temperature: 0.1

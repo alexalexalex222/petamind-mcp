@@ -3,14 +3,14 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "titan-factory"
+name = "petamind-mcp"
 version = "1.0.0"
-description = "TITAN-4-DESIGN Dataset Factory - Synthetic UI training data generator"
+description = "Petamind MCP - agentic coding loop with deterministic gates + mandatory vision"
 readme = "README.md"
 requires-python = ">=3.10"
-license = {text = "MIT"}
+license = {file = "LICENSE"}
 authors = [
-    {name = "Titan Factory Team"}
+    {name = "Alexander Burkhart"}
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -24,6 +24,7 @@ classifiers = [
 dependencies = [
     "typer>=0.9.0",
     "rich>=13.0.0",
+    "mcp>=1.25.0",
     "pydantic>=2.0.0",
     "pyyaml>=6.0",
     "httpx>=0.25.0",
@@ -49,6 +50,11 @@ dev = [
 
 [project.scripts]
 titan-factory = "titan_factory.cli:main"
+titan-code-mcp = "titan_factory.mcp_code_server:main"
+petamind-mcp = "petamind_mcp.mcp_server:main"
+petamind-setup = "petamind_mcp.setup:main"
+# Backwards compatibility (older docs / configs):
+terra-mind-mcp = "petamind_mcp.mcp_server:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -64,6 +64,62 @@ VIEWPORT_LABELS = {
 }
 
 
+_VISION_MODEL_FALLBACKS = [
+    # NOTE: Some Vertex projects only expose Gemini 3 Flash as the preview model.
+    # We keep fallbacks within the Gemini 3 Flash family (per ops preference).
+    "gemini-3-flash-preview",
+]
+
+
+def _is_model_not_found_error(err: Exception) -> bool:
+    msg = str(err or "")
+    lowered = msg.lower()
+    # Be liberal in detection: providers format 404s differently (space/newline/json).
+    return ("404" in lowered) and (
+        "not found" in lowered or "not_supported" in lowered or "not supported" in lowered
+    )
+
+
+async def _complete_with_vision_fallback(
+    *,
+    provider,
+    messages: list[Message],
+    model: str,
+    images: list[bytes],
+    max_tokens: int,
+    temperature: float,
+) -> "CompletionResponse":
+    """Call vision completion with safe model fallbacks when a model ID is not available.
+
+    This prevents a config typo (or auth-mode mismatch) from disabling broken-gate safety.
+    """
+    tried: list[str] = []
+    last_err: Exception | None = None
+
+    # Try configured model first, then fallbacks.
+    model_list = [model] + [m for m in _VISION_MODEL_FALLBACKS if m and m != model]
+
+    for m in model_list:
+        tried.append(m)
+        try:
+            return await provider.complete_with_vision(
+                messages=messages,
+                model=m,
+                images=images,
+                max_tokens=max_tokens,
+                temperature=temperature,
+            )
+        except Exception as e:
+            last_err = e
+            if _is_model_not_found_error(e):
+                continue
+            raise
+
+    raise RuntimeError(
+        "Vision model not available. Tried: " + ", ".join(tried[:6]) + f". Last error: {last_err}"
+    )
+
+
 BROKEN_GATE_SYSTEM_PROMPT = """You are a STRICT website screenshot validator.
 Your job is NOT to judge aesthetics. Only decide if the page is clearly BROKEN.
 
@@ -93,6 +149,178 @@ BROKEN_GATE_USER_PROMPT = """Decide whether this page is BROKEN.
 Be conservative: if unsure, set broken=false.
 Return broken=true only if confidence >= {min_confidence}.
 """
+
+
+SECTION_CREATIVITY_SYSTEM_PROMPT = """You are a section-level creativity evaluator for website screenshots.
+
+You will be given ONE full-page desktop screenshot and a list of expected section IDs (in order).
+Your job is NOT to judge overall aesthetics or whether the page is "premium".
+Instead, score each section for how DISTINCTIVE / CREATIVE it looks versus generic/template.
+
+SCORING (0.0 to 1.0):
+- 1.0: Distinctive, memorable, has a signature layout moment or motif, cohesive with the page.
+- 0.7: Solid and non-generic, some unique structure, visually intentional.
+- 0.4: Generic (stacked cards / plain blocks) with minimal uniqueness.
+- 0.0: Empty/blank, placeholder, broken-looking, or effectively missing.
+
+IMPORTANT:
+- Do NOT mark a section low just because it's minimal; minimal can still be intentional.
+- If a section is not visible / unclear, set score=0.5 and confidence<=0.4 with notes "unclear".
+- Output ONLY the provided section IDs (no extras) and keep the same order.
+- Keep notes short (<= 8 words). Do not include quotes.
+
+OUTPUT RULES:
+- Output ONLY valid JSON (no markdown, no <think>, no explanation).
+- JSON must start with { and end with }.
+- Prefer COMPACT JSON (single-line or minimal whitespace).
+
+OUTPUT FORMAT:
+{
+  "sections": [
+    {"id": "hero", "score": 0.0, "confidence": 0.0, "notes": "short note"},
+    {"id": "testimonials", "score": 0.0, "confidence": 0.0, "notes": "short note"}
+  ]
+}
+"""
+
+
+SECTION_CREATIVITY_USER_PROMPT = """Score section creativity for this page.
+
+Sections to evaluate (in order):
+{sections}
+
+Return scores for EVERY listed section id and ONLY those ids. If unclear/not found, use score=0.5 confidence<=0.4 and notes=unclear.
+"""
+
+
+# === Section creativity aggregation helpers ===
+#
+# We compute multiple aggregates:
+# - avg_all: across all confidently-evaluated sections (legacy behavior)
+# - core_avg: excludes utility sections like header/nav/footer/faq (avoids dragging down creativity signal)
+# - key_avg: focuses on the "key" conversion sections (hero/features/proof/pricing/etc)
+#
+# This supports the "creativity is the north star" philosophy without requiring *every*
+# utility section (e.g., footer) to be an avant-garde layout moment.
+_CREATIVITY_UTILITY_SUBSTRINGS = (
+    "header",
+    "nav",
+    "navbar",
+    "footer",
+    "faq",
+    "legal",
+)
+
+_CREATIVITY_KEY_SUBSTRINGS = (
+    "hero",
+    "problem",
+    "tension",
+    "how_it_works",
+    "how-it-works",
+    "process",
+    "timeline",
+    "benefits",
+    "features",
+    "social",
+    "proof",
+    "testimonials",
+    "pricing",
+    "offer",
+    "final_cta",
+    "cta",
+    "comparison",
+    "listings",
+    "grid",
+)
+
+
+def _compute_section_creativity_aggregates(
+    sections: list[dict[str, Any]],
+    *,
+    confidence_threshold: float = 0.5,
+    high_score_threshold: float = 0.7,
+) -> dict[str, float | int | None]:
+    def _is_utility(sid: str) -> bool:
+        sid_l = sid.lower().strip()
+        return any(x in sid_l for x in _CREATIVITY_UTILITY_SUBSTRINGS)
+
+    def _is_key(sid: str) -> bool:
+        sid_l = sid.lower().strip()
+        if _is_utility(sid_l):
+            return False
+        return any(x in sid_l for x in _CREATIVITY_KEY_SUBSTRINGS)
+
+    any_all: list[float] = []
+    any_core: list[float] = []
+    any_key: list[float] = []
+    conf_all: list[float] = []
+    conf_core: list[float] = []
+    conf_key: list[float] = []
+    high_count = 0
+
+    for s in sections:
+        if not isinstance(s, dict):
+            continue
+        sid = str(s.get("id") or "").strip()
+        if not sid:
+            continue
+
+        try:
+            score_val = float(s.get("score") or 0.0)
+        except Exception:
+            continue
+        try:
+            conf_val = float(s.get("confidence") or 0.0)
+        except Exception:
+            conf_val = 0.0
+
+        # Clamp defensively
+        if score_val < 0.0:
+            score_val = 0.0
+        if score_val > 1.0:
+            score_val = 1.0
+        if conf_val < 0.0:
+            conf_val = 0.0
+        if conf_val > 1.0:
+            conf_val = 1.0
+
+        is_utility = _is_utility(sid)
+        is_key = _is_key(sid)
+
+        any_all.append(score_val)
+        if not is_utility:
+            any_core.append(score_val)
+        if is_key:
+            any_key.append(score_val)
+
+        if conf_val >= confidence_threshold:
+            conf_all.append(score_val)
+            if not is_utility:
+                conf_core.append(score_val)
+                if score_val >= high_score_threshold:
+                    high_count += 1
+            if is_key:
+                conf_key.append(score_val)
+
+    def _avg(values: list[float]) -> float | None:
+        if not values:
+            return None
+        return sum(values) / float(len(values))
+
+    avg_all = _avg(conf_all) if conf_all else _avg(any_all)
+    core_avg = _avg(conf_core) if conf_core else _avg(any_core)
+    key_avg = _avg(conf_key) if conf_key else _avg(any_key)
+
+    # If we can't identify key sections, fall back to the more robust core_avg, then avg_all.
+    if key_avg is None:
+        key_avg = core_avg if core_avg is not None else avg_all
+
+    return {
+        "avg_all": avg_all,
+        "core_avg": core_avg,
+        "key_avg": key_avg,
+        "high_count": int(high_count),
+    }
 
 
 PREMIUM_GATE_SYSTEM_PROMPT = """You are a STRICT premium website quality validator.
@@ -269,12 +497,13 @@ async def get_creative_director_feedback(
     ]
 
     try:
-        response = await provider.complete_with_vision(
+        response = await _complete_with_vision_fallback(
+            provider=provider,
             messages=messages,
             model=config.vision_judge.model,
             images=images,
-            max_tokens=config.vision_judge.max_tokens,
-            temperature=config.vision_judge.temperature,
+            max_tokens=int(config.vision_judge.max_tokens or 1500),
+            temperature=float(config.vision_judge.temperature or 0.0),
         )
 
         data = extract_json_strict(response.content)
@@ -416,7 +645,10 @@ to avoid accidental filtering/polishing.
         )
 
     log_info(f"Premium vision gate: labeling {len(to_check)} rendered candidates...")
-    await asyncio.gather(*[_check_one(c) for c in to_check])
+    results = await asyncio.gather(*[_check_one(c) for c in to_check], return_exceptions=True)
+    for cand, res in zip(to_check, results):
+        if isinstance(res, BaseException):
+            log_warning(f"Candidate {cand.id}: Premium vision gate error (keeping): {res}")
     return candidates
 
 
@@ -465,29 +697,71 @@ Returns:
             log_warning(f"Candidate {candidate.id}: Failed to read screenshot for broken gate: {e}")
             return
 
+        # Deterministic blank-page heuristic:
+        # Truly blank/empty desktop screenshots compress extremely small (single-color PNGs).
+        # This catches the core bug where blank pages pass axe/Lighthouse because there's
+        # effectively nothing to audit.
+        #
+        # 1440×900 blank pages we observed were ~7–10 KB. Real pages are typically 100 KB+.
+        if len(img_bytes) < 20_000:
+            candidate.status = CandidateStatus.DISCARDED
+            candidate.error = (
+                f"Broken render heuristic: desktop screenshot too small ({len(img_bytes)} bytes)"
+            )
+            log_warning(
+                f"Candidate {candidate.id}: Discarded as broken (tiny screenshot: {len(img_bytes)} bytes)"
+            )
+            return
+
         messages = [
             Message(role="system", content=BROKEN_GATE_SYSTEM_PROMPT),
             Message(role="user", content=BROKEN_GATE_USER_PROMPT.format(min_confidence=min_conf)),
         ]
 
+        # Some Gemini "Flash preview" models allocate a hidden "thoughts" budget.
+        # Keep max_tokens high enough that we still receive the JSON output.
+        primary_model = config.vision_judge.model
+
+        resp = None
+        data = None
         try:
-            resp = await provider.complete_with_vision(
+            resp = await _complete_with_vision_fallback(
+                provider=provider,
                 messages=messages,
-                model=config.vision_judge.model,
+                model=primary_model,
                 images=[img_bytes],
-                max_tokens=min(800, int(config.vision_judge.max_tokens or 800)),
+                max_tokens=min(1200, int(config.vision_judge.max_tokens or 1200)),
                 temperature=0.0,
             )
-        except Exception as e:
-            # Do not discard on judge failure
-            log_warning(f"Candidate {candidate.id}: Broken vision gate failed (keeping): {e}")
-            return
-
-        try:
             data = extract_json_strict(resp.content)
-        except Exception as e:
-            log_warning(f"Candidate {candidate.id}: Broken gate returned non-JSON (keeping): {e}")
-            return
+        except Exception:
+            # One retry: request strict JSON only.
+            try:
+                retry_messages = messages + [
+                    Message(
+                        role="user",
+                        content=(
+                            "Your last output was not valid JSON. Re-output ONLY the JSON object.\n"
+                            "No markdown. No extra keys. Start with { and end with }."
+                        ),
+                    )
+                ]
+                resp2 = await _complete_with_vision_fallback(
+                    provider=provider,
+                    messages=retry_messages,
+                    model=primary_model,
+                    images=[img_bytes],
+                    max_tokens=min(1200, int(config.vision_judge.max_tokens or 1200)),
+                    temperature=0.0,
+                )
+                data = extract_json_strict(resp2.content)
+                resp = resp2
+            except Exception:
+                # Do not discard on judge failure
+                log_warning(
+                    f"Candidate {candidate.id}: Broken vision gate failed (keeping)"
+                )
+                return
 
         if not isinstance(data, dict):
             return
@@ -525,8 +799,159 @@ Returns:
                 )
 
     log_info(f"Broken vision gate: checking {len(to_check)} rendered candidates...")
-    await asyncio.gather(*[_check_one(c) for c in to_check])
+    results = await asyncio.gather(*[_check_one(c) for c in to_check], return_exceptions=True)
+    for cand, res in zip(to_check, results):
+        if isinstance(res, BaseException):
+            log_warning(f"Candidate {cand.id}: Broken vision gate error (keeping): {res}")
     return candidates
+
+
+async def assess_section_creativity(
+    candidate: Candidate,
+    config: Config,
+) -> list[dict] | None:
+    """Evaluate section-level creativity scores for a rendered candidate.
+
+This is used in skip_judge mode to selectively refine weak sections without
+running full scoring/winner selection.
+
+Returns:
+    List of dicts: [{"id": str, "score": float, "confidence": float, "notes": str}, ...]
+    or None if unavailable.
+"""
+    if candidate.status != CandidateStatus.RENDERED:
+        return None
+
+    if not config.vision_judge.model:
+        log_warning("creativity_refinement_enabled=true but no vision_judge.model configured; skipping")
+        return None
+
+    desktop_path = candidate.screenshot_paths.get("desktop") if candidate.screenshot_paths else None
+    if not desktop_path:
+        return None
+
+    try:
+        with open(desktop_path, "rb") as f:
+            img_bytes = f.read()
+    except Exception as e:
+        log_warning(f"Candidate {candidate.id}: Failed to read screenshot for creativity eval: {e}")
+        return None
+
+    # Build section list from UI_SPEC when available; fall back to a safe default list.
+    section_ids: list[str] = []
+    ui_spec = candidate.ui_spec
+    if ui_spec and getattr(ui_spec, "layout", None) and getattr(ui_spec.layout, "sections", None):
+        for s in ui_spec.layout.sections:
+            sid = str(getattr(s, "id", "") or "").strip()
+            if sid:
+                section_ids.append(sid)
+
+    if not section_ids:
+        section_ids = ["hero", "features", "testimonials", "faq", "footer"]
+
+    sections_text = "\n".join(f"- {sid}" for sid in section_ids[:12])
+    messages = [
+        Message(role="system", content=SECTION_CREATIVITY_SYSTEM_PROMPT),
+        Message(role="user", content=SECTION_CREATIVITY_USER_PROMPT.format(sections=sections_text)),
+    ]
+
+    provider = ProviderFactory.get(config.vision_judge.provider, config)
+
+    primary_model = config.vision_judge.model
+
+    async def _call(model: str, *, retry_json_only: bool) -> "CompletionResponse":
+        call_messages = messages
+        if retry_json_only:
+            call_messages = messages + [
+                Message(
+                    role="user",
+                    content=(
+                        "Re-output ONLY the JSON object. No markdown. No extra keys. "
+                        "Start with { and end with }."
+                    ),
+                )
+            ]
+        return await _complete_with_vision_fallback(
+            provider=provider,
+            messages=call_messages,
+            model=model,
+            images=[img_bytes],
+            # Keep section-level creativity scoring deterministic and fast.
+            # This is an evaluator, not a generator; higher temperature does not increase creativity.
+            max_tokens=min(4000, int(config.vision_judge.max_tokens or 2000)),
+            temperature=0.0,
+        )
+
+    resp = None
+    data = None
+    try:
+        resp = await _call(primary_model, retry_json_only=False)
+        data = extract_json_strict(resp.content)
+    except asyncio.CancelledError as e:
+        log_warning(f"Candidate {candidate.id}: Section creativity eval cancelled (skipping): {e}")
+        return None
+    except Exception as e:
+        # Retry once: ask for strict JSON.
+        try:
+            resp2 = await _call(primary_model, retry_json_only=True)
+            data = extract_json_strict(resp2.content)
+            resp = resp2
+        except asyncio.CancelledError as e2:
+            log_warning(f"Candidate {candidate.id}: Section creativity eval cancelled (skipping): {e2}")
+            return None
+        except Exception as e2:
+            if data is None:
+                log_warning(
+                    f"Candidate {candidate.id}: Section creativity eval returned non-JSON: {e2}"
+                )
+                return None
+
+    sections = None
+    if isinstance(data, dict):
+        sections = data.get("sections")
+    elif isinstance(data, list):
+        # Some models output a bare list; accept it.
+        sections = data
+    if not isinstance(sections, list):
+        try:
+            keys = list(data.keys())[:10] if isinstance(data, dict) else []
+        except Exception:
+            keys = []
+        log_warning(
+            f"Candidate {candidate.id}: Section creativity JSON missing sections list "
+            f"(type={type(data).__name__}, keys={keys})"
+        )
+        return None
+
+    out: list[dict] = []
+    for item in sections[:20]:
+        if not isinstance(item, dict):
+            continue
+        sid = str(item.get("id") or "").strip()
+        if not sid:
+            continue
+        try:
+            score = float(item.get("score") or 0.0)
+        except Exception:
+            score = 0.0
+        try:
+            conf = float(item.get("confidence") or 0.0)
+        except Exception:
+            conf = 0.0
+        notes = str(item.get("notes") or "").strip()
+        out.append(
+            {
+                "id": sid,
+                "score": max(0.0, min(1.0, score)),
+                "confidence": max(0.0, min(1.0, conf)),
+                "notes": notes[:120],
+            }
+        )
+
+    # Ensure deterministic ordering by the requested ids when possible.
+    idx = {sid: i for i, sid in enumerate(section_ids)}
+    out.sort(key=lambda d: idx.get(str(d.get("id") or ""), 10_000))
+    return out
 
 
 async def score_candidate(
@@ -620,15 +1045,38 @@ async def _score_with_vision(candidate: Candidate, config: Config) -> JudgeScore
         return [str(value)]
 
     try:
-        response = await provider.complete_with_vision(
+        response = await _complete_with_vision_fallback(
+            provider=provider,
             messages=messages,
             model=config.vision_judge.model,
             images=images,
-            max_tokens=config.vision_judge.max_tokens,
-            temperature=config.vision_judge.temperature,
+            max_tokens=int(config.vision_judge.max_tokens or 1500),
+            temperature=float(config.vision_judge.temperature or 0.0),
         )
 
-        score_data = extract_json_strict(response.content)
+        try:
+            score_data = extract_json_strict(response.content)
+        except Exception:
+            # Retry once with a strict JSON-only instruction to reduce parsing failures
+            # from models that include prefacing text.
+            response2 = await _complete_with_vision_fallback(
+                provider=provider,
+                messages=messages
+                + [
+                    Message(
+                        role="user",
+                        content=(
+                            "Re-output ONLY the JSON object. No markdown. No extra keys. "
+                            "Start with { and end with }."
+                        ),
+                    )
+                ],
+                model=config.vision_judge.model,
+                images=images,
+                max_tokens=int(config.vision_judge.max_tokens or 1500),
+                temperature=float(config.vision_judge.temperature or 0.0),
+            )
+            score_data = extract_json_strict(response2.content)
 
         # Some models occasionally wrap the object in a JSON list.
         # Normalize to a dict payload.
@@ -829,7 +1277,38 @@ async def score_all_candidates(
 
     log_info(f"Scoring {len(to_score)} candidates...")
 
+    creativity_weight = float(getattr(config.pipeline, "selection_creativity_weight", 0.4) or 0.0)
+    need_creativity = bool(getattr(config.pipeline, "refinement_skip_for_high_creativity", True)) or (
+        creativity_weight > 0.0
+    )
+
     for candidate in to_score:
+        # Best-effort: compute section-level creativity metrics for downstream selection/refinement.
+        # Keep this failure-tolerant so judge outages don't block the pipeline.
+        if need_creativity:
+            try:
+                sections = await assess_section_creativity(candidate, config)
+            except Exception as e:
+                sections = None
+                log_warning(f"Candidate {candidate.id}: Section creativity eval failed (continuing): {e}")
+
+            if sections:
+                candidate.section_creativity = [s for s in sections if isinstance(s, dict)]
+                agg = _compute_section_creativity_aggregates(candidate.section_creativity)
+                candidate.section_creativity_avg = (
+                    float(agg["avg_all"]) if agg.get("avg_all") is not None else None
+                )
+                candidate.section_creativity_core_avg = (
+                    float(agg["core_avg"]) if agg.get("core_avg") is not None else None
+                )
+                candidate.section_creativity_key_avg = (
+                    float(agg["key_avg"]) if agg.get("key_avg") is not None else None
+                )
+                try:
+                    candidate.section_creativity_high_count = int(agg.get("high_count") or 0)
+                except Exception:
+                    candidate.section_creativity_high_count = None
+
         try:
             score = await score_candidate(candidate, config)
             candidate.score = score.score

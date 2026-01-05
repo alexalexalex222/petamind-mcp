@@ -1,7 +1,7 @@
 """Pydantic models and JSON Schema definitions for TITAN Factory."""
 
 from enum import Enum
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -37,6 +37,11 @@ class Accent(str, Enum):
     GREEN = "green"
     ORANGE = "orange"
     RED = "red"
+    AMBER = "amber"
+    ROSE = "rose"
+    CYAN = "cyan"
+    LIME = "lime"
+    FUCHSIA = "fuchsia"
 
 
 class Radius(str, Enum):
@@ -82,7 +87,37 @@ class Brand(BaseModel):
         ...,
         description="Style descriptors",
         min_length=1,
-        max_length=5,
+        max_length=12,
+    )
+
+    # Optional style-routing metadata (deterministic; used to prevent style monoculture).
+    # These fields are optional for backwards compatibility; the pipeline may inject them
+    # even if the planner does not output them explicitly.
+    style_family: str | None = Field(
+        default=None,
+        description="Style family routed for this niche (e.g., serene_minimal, trusted_professional)",
+    )
+    style_persona: str | None = Field(
+        default=None,
+        description="Short persona phrase describing the routed style",
+    )
+    style_keywords_mandatory: list[str] = Field(
+        default_factory=list,
+        description="Style keywords that must be reflected in the UI (router-provided)",
+        max_length=16,
+    )
+    style_avoid: list[str] = Field(
+        default_factory=list,
+        description="Motifs/keywords to avoid (router-provided)",
+        max_length=16,
+    )
+    imagery_style: str | None = Field(
+        default=None,
+        description="Imagery style descriptor (router-provided)",
+    )
+    layout_motif: str | None = Field(
+        default=None,
+        description="Short motif to guide layout/visual rhythm (router-provided)",
     )
     radius: Radius = Field(default=Radius.MEDIUM, description="Border radius style")
     density: Density = Field(default=Density.BALANCED, description="Layout density")
@@ -310,6 +345,21 @@ class Task(BaseModel):
     is_edit: bool = Field(default=False, description="Whether this is an edit task")
     code_old: str | None = Field(default=None, description="Original code for edit tasks")
 
+    # Optional style-routing metadata (deterministic; used for evaluation + gates).
+    style_family: str | None = Field(default=None, description="Routed style family")
+    style_persona: str | None = Field(default=None, description="Routed style persona")
+    style_keywords_mandatory: list[str] = Field(
+        default_factory=list, description="Mandatory style keywords from router"
+    )
+    style_avoid: list[str] = Field(
+        default_factory=list, description="Avoid/banned motifs from router"
+    )
+    style_density: str | None = Field(default=None, description="Routed density (airy/balanced/compact)")
+    style_imagery_style: str | None = Field(default=None, description="Routed imagery style")
+    style_layout_motif: str | None = Field(default=None, description="Routed layout motif")
+    theme_mood: str | None = Field(default=None, description="Theme override mood (light/dark)")
+    theme_accent: str | None = Field(default=None, description="Theme override accent")
+
 
 class NicheDefinition(BaseModel):
     """Niche definition."""
@@ -352,17 +402,91 @@ class Candidate(BaseModel):
     task_id: str = Field(..., description="Parent task ID")
     generator_model: str = Field(..., description="Model that generated this")
     variant_index: int = Field(..., description="Variant number")
+    generator_temperature: float | None = Field(
+        default=None,
+        description=(
+            "Temperature used for the generator call. This may include any per-variant offset "
+            "and retry-time adjustments, and is recorded for temperature sweep analysis."
+        ),
+    )
     status: CandidateStatus = Field(default=CandidateStatus.PENDING)
     ui_spec: UISpec | None = Field(default=None)
     files: list[GeneratedFile] = Field(default_factory=list)
     build_logs: str = Field(default="")
     fix_rounds: int = Field(default=0)
     screenshot_paths: dict[str, str] = Field(default_factory=dict)
+
+    # === DETERMINISTIC QUALITY GATES (AXE + LIGHTHOUSE) ===
+    deterministic_passed: bool | None = Field(
+        default=None,
+        description="Whether candidate passed deterministic quality gates (axe + Lighthouse).",
+    )
+    deterministic_failures: list[str] = Field(
+        default_factory=list,
+        description="Reasons candidate failed deterministic gates (if enforced).",
+    )
+    axe_violations: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="Axe-core violation summaries (small, curated subset).",
+    )
+    lighthouse_scores: dict[str, float] = Field(
+        default_factory=dict,
+        description="Lighthouse category scores (0.0-1.0), e.g. performance/accessibility/best_practices/seo.",
+    )
+    lighthouse_report_path: str | None = Field(
+        default=None,
+        description="Path to saved Lighthouse JSON report for audit/debug.",
+    )
+
+    # === STYLE GATES (cheap deterministic enforcement) ===
+    # These are NOT accessibility/quality gates; they are aesthetic/appropriateness guardrails
+    # intended to prevent cross-vertical monoculture (e.g., cyber/neon/terminal everywhere).
+    style_gate_passed: bool | None = Field(
+        default=None,
+        description="Whether candidate passed deterministic style gates (router compliance).",
+    )
+    style_gate_failures: list[str] = Field(
+        default_factory=list,
+        description="Style gate failure reasons (if any).",
+    )
+    style_gate_warnings: list[str] = Field(
+        default_factory=list,
+        description="Style gate warning reasons (if any).",
+    )
+    style_gate_details: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Extra style gate debug details (counters, thresholds, etc.).",
+    )
     score: float | None = Field(default=None)
     score_details: JudgeScore | None = Field(default=None)
     premium_gate: PremiumGate | None = Field(
         default=None,
         description="Optional premium/ship-ready assessment from a vision model",
+    )
+    section_creativity: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="Optional section-level creativity evaluation results (0.0-1.0 per section).",
+    )
+    section_creativity_avg: float | None = Field(
+        default=None,
+        description="Average section creativity score (0.0-1.0) computed from confident section evaluations.",
+    )
+    section_creativity_core_avg: float | None = Field(
+        default=None,
+        description=(
+            "Average section creativity excluding utility sections like header/nav/footer/faq."
+        ),
+    )
+    section_creativity_key_avg: float | None = Field(
+        default=None,
+        description=(
+            "Average section creativity across key conversion sections (hero/features/proof/pricing/etc). "
+            "Used as the primary creativity metric for gating/selection when available."
+        ),
+    )
+    section_creativity_high_count: int | None = Field(
+        default=None,
+        description="Count of confidently-evaluated sections with score >= 0.7.",
     )
     creative_director_feedback: "CreativeDirectorFeedback | None" = Field(
         default=None,
@@ -458,14 +582,49 @@ def validate_ui_spec(data: dict) -> UISpec:
     Raises:
         ValidationError: If validation fails
     """
-    return UISpec.model_validate(data)
+    # Be tolerant to minor planner over-generation that violates max_length constraints.
+    # This improves pipeline robustness without relaxing the schema itself.
+    #
+    # We only trim lists that exceed declared max lengths; we do not invent missing fields.
+    sanitized: dict = dict(data or {})
+
+    brand = sanitized.get("brand")
+    if isinstance(brand, dict):
+        style_keywords = brand.get("style_keywords")
+        if isinstance(style_keywords, list) and len(style_keywords) > 12:
+            brand2 = dict(brand)
+            brand2["style_keywords"] = style_keywords[:12]
+            sanitized["brand"] = brand2
+
+    content = sanitized.get("content")
+    if isinstance(content, dict):
+        content2 = None
+        for key, max_len in (("highlights", 6), ("testimonials", 4), ("faq", 6)):
+            items = content.get(key)
+            if isinstance(items, list) and len(items) > max_len:
+                if content2 is None:
+                    content2 = dict(content)
+                content2[key] = items[:max_len]
+        if content2 is not None:
+            sanitized["content"] = content2
+
+    layout = sanitized.get("layout")
+    if isinstance(layout, dict):
+        nav = layout.get("navigation")
+        nav_key = str(nav or "").strip().lower()
+        if nav_key and nav_key not in ("minimal", "standard"):
+            layout2 = dict(layout)
+            layout2["navigation"] = "standard"
+            sanitized["layout"] = layout2
+
+    return UISpec.model_validate(sanitized)
 
 
-def validate_uigen_output(data: dict) -> UIGenOutput:
+def validate_uigen_output(data: Any) -> UIGenOutput:
     """Validate UI generator output.
 
     Args:
-        data: Raw JSON dict
+        data: Raw JSON (dict strongly preferred; some models emit a bare list of files)
 
     Returns:
         Validated UIGenOutput
@@ -473,6 +632,14 @@ def validate_uigen_output(data: dict) -> UIGenOutput:
     Raises:
         ValidationError: If validation fails
     """
+    # Some generators occasionally emit a bare list of files instead of:
+    #   {"files": [{"path": "...", "content": "..."}, ...]}
+    # Accept this and wrap to keep throughput high.
+    if isinstance(data, list):
+        if all(isinstance(item, dict) for item in data):
+            if all(("path" in item and "content" in item) for item in data):
+                data = {"files": data}
+
     return UIGenOutput.model_validate(data)
 
 

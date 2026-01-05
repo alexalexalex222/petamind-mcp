@@ -24,13 +24,13 @@ models:
       model: moonshotai/kimi-k2-thinking-maas
       publishable: true
       variants: 2
-      max_tokens: 12000
+      max_tokens: 65000
       temperature: 0.8
     - provider: vertex
       model: minimaxai/minimax-m2-maas
       publishable: true
       variants: 2
-      max_tokens: 12000
+      max_tokens: 65000
       temperature: 0.8
 
   # Build-error fixer. Keep small rounds; we only care about "not broken".
@@ -38,7 +38,7 @@ models:
     provider: vertex
     model: deepseek-ai/deepseek-v3.2-maas
     publishable: true
-    max_tokens: 6000
+    max_tokens: 16000
     temperature: 0.2
 
   # Vision gate model (used only to discard clearly broken renders)

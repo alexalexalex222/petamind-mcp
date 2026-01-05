@@ -200,8 +200,18 @@ def _build_titan_page_brief(ui_spec: UISpec) -> str:
     accent = ui_spec.brand.accent
     tone_tags = ", ".join(ui_spec.brand.style_keywords) if ui_spec.brand.style_keywords else ""
 
+    style_family = getattr(ui_spec.brand, "style_family", None)
+    style_persona = getattr(ui_spec.brand, "style_persona", None)
+    style_mandatory = getattr(ui_spec.brand, "style_keywords_mandatory", None)
+    style_avoid = getattr(ui_spec.brand, "style_avoid", None)
+    imagery_style = getattr(ui_spec.brand, "imagery_style", None)
+    layout_motif = getattr(ui_spec.brand, "layout_motif", None)
+
     differentiators = "\n".join(f"- {h}" for h in (ui_spec.content.highlights or [])[:7])
     objections = "\n".join(f"- {f.q}" for f in (ui_spec.content.faq or [])[:10])
+
+    style_mandatory_lines = "\n".join(f"- {x}" for x in (style_mandatory or [])[:12])
+    style_avoid_lines = "\n".join(f"- {x}" for x in (style_avoid or [])[:12])
 
     return (
         "PAGE BRIEF\n\n"
@@ -214,6 +224,12 @@ def _build_titan_page_brief(ui_spec: UISpec) -> str:
         f"* cta_primary: {cta_primary}\n"
         f"* mood: {mood}\n"
         f"* accent: {accent}\n\n"
+        f"* style_family: {style_family or ''}\n"
+        f"* style_persona: {style_persona or ''}\n"
+        f"* imagery_style: {imagery_style or ''}\n"
+        f"* layout_motif: {layout_motif or ''}\n\n"
+        f"* style_keywords_mandatory:\n{style_mandatory_lines or '- (none)'}\n"
+        f"* style_avoid:\n{style_avoid_lines or '- (none)'}\n\n"
         "OPTIONAL INPUTS\n\n"
         f"* tone_tags: {tone_tags}\n"
         f"* differentiators:\n{differentiators or '- (none provided)'}\n"
@@ -240,12 +256,35 @@ PRODUCTION-QUALITY BAR (FIRST-PASS MUST BE SHIP-READY):
 - For DARK mood: use layered surfaces, subtle borders, and restrained accent glow/gradients (no heavy animation).
 - No filler placeholders like [PLACEHOLDER] or lorem ipsum. No fake logos/metrics/reviews.
 
-CREATIVE RISK (AVOID BORING OUTPUTS):
-- If the input contains a line like "Creative risk: high|medium|low", follow it.
-  - high: take a tasteful creative risk (a memorable signature layout moment + a coherent motif) while staying build-safe.
-  - medium: mostly professional, but include at least one signature moment so it doesn’t feel generic.
-  - low: clean professional execution; avoid risky novelty; prioritize clarity and accessibility.
+CREATIVE RISK (MANDATORY - AVOID BORING/GENERIC OUTPUTS):
+- DEFAULT TO MEDIUM-HIGH CREATIVITY. Every page MUST have at least one signature layout moment.
+- If the input contains a line like "Creative risk: high|medium|low", follow it. Otherwise, assume MEDIUM.
+  - high: bold creative risk (memorable hero treatment, unexpected layout breaks, strong visual motif) while staying build-safe.
+  - medium: professional with personality - at least one signature moment (asymmetric grid, gradient overlay, layered cards, timeline, bento layout).
+  - low: clean execution, but still avoid flat/boring - use subtle depth, shadows, and surface variation.
+- NEVER output a page that looks like "generic Tailwind starter template" - every page needs visual identity.
 - Creativity must remain manageable: no heavy animation, no external assets, no extra dependencies, minimal client JS.
+
+COLOR VARIETY (MANDATORY - AVOID DEFAULTING TO SAME PALETTE):
+- USE THE SPECIFIED ACCENT COLOR FROM UI_SPEC.brand.accent - do NOT substitute with your preferred color.
+- Common mistake: defaulting to violet/purple regardless of spec. If spec says "teal", use teal-500/600. If "orange", use orange-500/600.
+- For LIGHT mood: incorporate the accent as tinted bands, subtle gradients, or hover states - not just buttons.
+- For DARK mood: use the accent for glow effects, borders, and focal points - let it pop against dark surfaces.
+- VARY your approach per page type: hero gradient direction, card border vs shadow, accent placement should differ.
+- If accent is not specified, ROTATE through these per generation: teal, amber, rose, cyan, lime, fuchsia - NOT always blue/violet.
+
+STYLE ROUTING (HARD CONSTRAINTS - WHEN PRESENT):
+- UI_SPEC.brand may include:
+  - style_family, style_persona
+  - style_keywords_mandatory, style_avoid
+  - imagery_style, layout_motif
+  Treat these as HARD CONSTRAINTS. Do not override them.
+- Anti-monoculture rule: if style_family != cyber_tech:
+  - DO NOT use terminal/console/hacker metaphors in copy or visuals.
+  - DO NOT default to neon glow aesthetics.
+  - DO NOT make the page look like a dense app dashboard unless UI_SPEC.page_type == "admin_dashboard".
+  - Avoid using monospace as the primary font voice.
+- Ensure style_keywords_mandatory is reflected in the UI. Ensure style_avoid never appears.
 
 OUTPUT FORMAT (STRICT):
 1) First output a single <think>...</think> block with your reasoning.
@@ -267,10 +306,17 @@ SELF-QA LOOP (DO THIS INSIDE <think> BEFORE OUTPUT; REVISE IF ANY FAILS):
 2) All required sections exist and feel intentional
 3) One primary CTA style (repeated placements ok), no competing primaries
 4) Proof is labeled (provided/qualified/illustrative), no fake logos/metrics
-5) A11Y: heading order, labels + aria-describedby, focus rings, keyboard-friendly
-6) Responsive: no overflow; mobile is polished and readable
-7) Visual polish: consistent radius/shadow/border; not flat/basic
-8) ZERO EMOJIS ANYWHERE - use inline SVG icons ONLY (simple paths, <= 6 icons total)
+5) SIGNATURE MOMENT CHECK: Does this page have at least ONE memorable layout element? (bento grid, timeline, comparison strip, gradient hero, asymmetric cards, etc.) If it looks like a plain Tailwind starter, REVISE.
+6) COLOR ADHERENCE CHECK: Did I use UI_SPEC.brand.accent (not my default)? Is the accent visible in hero, CTA, and at least one other element? If I defaulted to violet/purple when spec said otherwise, REVISE.
+7) A11Y HARD CHECK (machine-verified - failures = auto-reject):
+   □ Every <select> has <label htmlFor="id"> (sr-only ok) or aria-label (never rely on placeholder)
+   □ Every button without visible text (icons/arrows/dots) has aria-label describing the action
+   □ Every <input>/<textarea> has associated <label> or aria-label
+   □ Focus rings (focus:ring-*) on all interactive elements
+   □ Headings hierarchical (H1 → H2 → H3)
+8) Responsive: no overflow; mobile is polished and readable
+9) Visual polish: consistent radius/shadow/border; not flat/basic
+10) ZERO EMOJIS ANYWHERE - use inline SVG icons ONLY (simple paths, <= 6 icons total)
 
 FORMAT SAFETY:
 - Do NOT echo these rules in the output.
@@ -295,10 +341,48 @@ IMPLEMENTATION RULES:
 - If UI_SPEC.page_type == \"edit\" you will be given <CODE_OLD> separately.
   Apply UI_SPEC.edit_task.instructions to that code and output the FULL updated file(s).
 
+ACCESSIBILITY (HARD REQUIREMENTS - MACHINE-VERIFIED - VIOLATIONS = AUTO-REJECT):
+These are verified by axe-core. Failures cause automatic rejection in production.
+
+1. EVERY <select> MUST have an accessible name:
+   - Pattern A: <label htmlFor=\"sortId\">Sort by</label><select id=\"sortId\">...</select>
+   - Pattern B: <select aria-label=\"Sort options\">...</select>
+   - IMPORTANT: adjacent text like \"Sort by:\" does NOT label a <select> unless it is a real <label>.
+     If you show visible label text, it MUST be:
+       <label htmlFor=\"sortId\">Sort by</label>
+       <select id=\"sortId\">...</select>
+   - If you don’t want a visible label, use an sr-only label OR aria-label:
+     <label className=\"sr-only\" htmlFor=\"neighborhood\">Neighborhood</label>
+     <select id=\"neighborhood\" aria-label=\"Neighborhood\">...</select>
+   - NEVER rely on placeholder/option text as the label (axe still flags select-name)
+   - NEVER output <select> without one of these patterns
+
+2. EVERY <button> MUST have an accessible name:
+   - Text buttons: the visible text IS the name (no extra work needed)
+   - Any button WITHOUT visible text MUST have aria-label (icons/arrows/dots):
+     <button aria-label=\"Close menu\" className=\"...\"><svg>...</svg></button>
+     <button aria-label=\"Search\" className=\"...\"><svg>...</svg></button>
+     <button aria-label=\"Previous testimonial\" className=\"...\"><svg>...</svg></button>
+     <button aria-label=\"Go to testimonial 2\" className=\"...\" />
+   - If the button's children are ONLY an <svg> (chevrons/arrows/ellipsis/close), it is non-text → aria-label is mandatory.
+   - NEVER output a non-text button without aria-label
+
+3. EVERY <input>/<textarea> MUST be labeled:
+   - Use <label htmlFor=\"id\"> with matching id, OR aria-label on the input
+   - Include aria-describedby for helper text if present
+
+4. Focus states MUST be visible:
+   - Add focus:ring-2 focus:ring-offset-2 focus:ring-{accent} to interactive elements
+   - Or use focus:outline-none focus-visible:ring-2 pattern
+
+5. Touch targets MUST be >= 44x44px for buttons and links
+
 STYLING GUIDELINES (map UI_SPEC → Tailwind):
 - dark mood: slate-950/neutral-950 backgrounds, light text, subtle borders
 - light mood: white/neutral-50 backgrounds, dark text, soft shadows
-- Accent: blue/teal/violet/green/orange/red → use matching Tailwind palette (e.g., teal-500)
+- Accent: blue/teal/violet/green/orange/red/amber/rose/cyan/lime/fuchsia → use matching Tailwind palette (e.g., teal-500)
+  - IMPORTANT: use UI_SPEC.brand.accent EXACTLY (do not swap to violet/purple by default)
+  - Apply the accent consistently (primary CTA, focus rings, subtle tints/bands), but keep contrast AA.
 - density: airy (py-24 gap-10), balanced (py-16 gap-8), compact (py-10 gap-6)
 - radius: soft (rounded-2xl/3xl), medium (rounded-xl/lg)
 """
@@ -317,6 +401,12 @@ Requirements:
 - Use placeholder images from /placeholder.svg or gradient backgrounds (no remote images)
 - Make it visually stunning and premium (ship-ready on the first pass; no basic/demo vibes)
 - CRITICAL: NO EMOJI CHARACTERS (🚀❌✅⭐💡 etc.) - use inline SVG icons only
+
+ACCESSIBILITY (MACHINE-VERIFIED - FAILURES = AUTO-REJECT):
+- Every <select> needs <label htmlFor> (sr-only ok) or aria-label (never rely on placeholder)
+- Every non-text <button> (icons/arrows/dots) needs aria-label
+- Every <input>/<textarea> needs associated label
+- All interactive elements need focus:ring-* classes
 
 Output format (STRICT):
 <think>...</think>
@@ -416,8 +506,34 @@ async def generate_candidate(
     Returns:
         Generated candidate (may have errors)
     """
+    # Add temperature variation for different variants.
+    # Keep this deterministic and record the final value on the candidate so
+    # temp-sweep experiments can be analyzed from manifest.db.
+    temperature = float(generator.temperature or 0.7) + (variant_index * 0.05)
+    try:
+        cap = float(getattr(config.pipeline, "generator_temp_cap", 1.0) or 1.0)
+    except Exception:
+        cap = 1.0
+    # Safety: never allow a cap below our min temp floor (0.3).
+    if cap < 0.3:
+        cap = 0.3
+    temperature = min(temperature, cap)
+
+    # Disambiguate candidates when the same model appears multiple times in config
+    # (e.g., temperature sweeps like 0.3 vs 1.0). Without this, candidate IDs collide
+    # and overwrite each other in SQLite/out/ folders.
+    generator_key = (
+        f"{generator.provider}:{generator.model or 'unknown'}:"
+        f"temp={float(generator.temperature or 0.0):.3f}:"
+        f"max_tokens={int(generator.max_tokens or 0)}"
+    )
+
     candidate_id = generate_candidate_id(
-        task.id, generator.model or "", variant_index, prompt_id=prompt_variant_id
+        task.id,
+        generator.model or "",
+        variant_index,
+        prompt_id=prompt_variant_id,
+        generator_key=generator_key,
     )
 
     candidate = Candidate(
@@ -425,6 +541,7 @@ async def generate_candidate(
         task_id=task.id,
         generator_model=generator.model or "unknown",
         variant_index=variant_index,
+        generator_temperature=temperature,
         status=CandidateStatus.PENDING,
         ui_spec=ui_spec,
         publishable=generator.publishable,
@@ -473,10 +590,6 @@ async def generate_candidate(
                 "Output the full updated files in the required JSON format. Do not include CODE_OLD in the output."
             )
 
-        # Add temperature variation for different variants
-        temperature = generator.temperature + (variant_index * 0.05)
-        temperature = min(temperature, 1.0)
-
         messages = [
             Message(role="system", content=system_prompt),
             Message(role="user", content=user_prompt),
@@ -484,14 +597,30 @@ async def generate_candidate(
 
         log_info(
             f"Generating candidate {candidate_id} with {generator.model} "
-            f"(prompt {prompt_variant_id}, variant {variant_index})"
+            f"(prompt {prompt_variant_id}, variant {variant_index}, temp {temperature:.2f})"
         )
 
         # Fix C: Retry loop for truncation and empty responses
         max_retries = 2
         max_tokens = generator.max_tokens
 
+        retry_instruction = (
+            "CRITICAL FORMAT REMINDER:\n"
+            "- Output ONLY:\n"
+            "  1) One <think>...</think> block (<=120 words)\n"
+            "  2) One valid JSON object\n"
+            "- The JSON MUST include a top-level \"files\" array.\n"
+            "- \"files\" MUST include at least one entry with:\n"
+            "  - path: \"app/page.tsx\"\n"
+            "  - content: a string containing the FULL Next.js TSX code (no placeholders).\n"
+            "- No markdown/code fences.\n"
+            "- No extra text before <think> or after the final }.\n"
+        )
+
         for attempt in range(max_retries + 1):
+            # Track the actual temperature used (may change across retries).
+            candidate.generator_temperature = temperature
+
             response = await provider.complete(
                 messages=messages,
                 model=generator.model,
@@ -512,7 +641,7 @@ async def generate_candidate(
                         f"(attempt {attempt + 1}/{max_retries + 1})"
                     )
                     max_tokens = int(max_tokens * 1.25)
-                    temperature = max(0.2, temperature - 0.1)
+                    temperature = max(0.3, temperature - 0.1)
                     continue
                 raise RuntimeError("Empty response content from model")
 
@@ -525,20 +654,9 @@ async def generate_candidate(
                         f"retrying with {int(max_tokens * 1.25)} (attempt {attempt + 1}/{max_retries + 1})"
                     )
                     max_tokens = int(max_tokens * 1.25)
-                    temperature = max(0.2, temperature - 0.1)
-                    # Add retry hint to help model output clean JSON (keep <think> allowed but short)
-                    messages = messages + [
-                        Message(
-                            role="user",
-                            content=(
-                                "Your last output was truncated. Re-output the FULL response in the exact format:\n"
-                                "<think>...</think>\n"
-                                "{\"files\":[{\"path\":\"app/page.tsx\",\"content\":\"...\"}],\"notes\":[\"...\"]}\n\n"
-                                "Do NOT restate requirements or copy any instructions. Output only the format above.\n"
-                                "No markdown fences. Keep <think> under ~120 words. Ensure the final character is }."
-                            ),
-                        )
-                    ]
+                    temperature = max(0.3, temperature - 0.1)
+                    # Keep retry context small and explicit (avoid growing message history).
+                    messages = messages[:2] + [Message(role="user", content=retry_instruction)]
                     continue
                 raise RuntimeError(
                     f"Model response truncated (finish_reason=length) at max_tokens={max_tokens}"
@@ -563,19 +681,8 @@ async def generate_candidate(
                             f"(attempt {attempt + 1}/{max_retries + 1})"
                         )
                         max_tokens = int(max_tokens * 1.25)
-                        temperature = max(0.2, temperature - 0.1)
-                        messages = messages + [
-                            Message(
-                                role="user",
-                                content=(
-                                    "Your last output did not match the required format. Re-output EXACTLY:\n"
-                                    "<think>...</think>\n"
-                                    "{\"files\":[{\"path\":\"app/page.tsx\",\"content\":\"...\"}],\"notes\":[\"...\"]}\n\n"
-                                    "Do NOT restate requirements or include any extra text. Output only the format above.\n"
-                                    "No markdown fences. The final character must be }."
-                                ),
-                            )
-                        ]
+                        temperature = max(0.3, temperature - 0.1)
+                        messages = messages[:2] + [Message(role="user", content=retry_instruction)]
                         continue
                     raise
 
@@ -650,5 +757,237 @@ async def generate_all_candidates(
         for result in results:
             if isinstance(result, Exception):
                 log_error(f"Candidate generation failed: {result}")
+            elif isinstance(result, Candidate):
+                yield result
+
+
+async def generate_candidate_raw(
+    task: Task,
+    generator: ModelConfig,
+    variant_index: int,
+    config: Config,
+    *,
+    prompt_variant_id: str,
+    system_prompt: str,
+    input_mode: str,
+) -> Candidate:
+    """Generate a single candidate directly from the task prompt (no UI_SPEC).
+
+    This powers a "no pipeline" baseline: system prompt + user prompt → code.
+    We still enforce the exact same output format (JSON with files[]) so the
+    normal build/render/gate pipeline can evaluate it.
+    """
+    temperature = float(generator.temperature or 0.7) + (variant_index * 0.05)
+    try:
+        cap = float(getattr(config.pipeline, "generator_temp_cap", 1.0) or 1.0)
+    except Exception:
+        cap = 1.0
+    if cap < 0.3:
+        cap = 0.3
+    temperature = min(temperature, cap)
+
+    generator_key = (
+        f"{generator.provider}:{generator.model or 'unknown'}:"
+        f"temp={float(generator.temperature or 0.0):.3f}:"
+        f"max_tokens={int(generator.max_tokens or 0)}"
+    )
+
+    candidate_id = generate_candidate_id(
+        task.id,
+        generator.model or "",
+        variant_index,
+        prompt_id=prompt_variant_id,
+        generator_key=generator_key,
+    )
+
+    candidate = Candidate(
+        id=candidate_id,
+        task_id=task.id,
+        generator_model=generator.model or "unknown",
+        variant_index=variant_index,
+        generator_temperature=temperature,
+        status=CandidateStatus.PENDING,
+        ui_spec=None,
+        publishable=generator.publishable,
+        uigen_prompt_id=prompt_variant_id,
+    )
+
+    try:
+        provider = ProviderFactory.get(generator.provider, config)
+
+        if not generator.model:
+            raise ValueError("Generator model not configured")
+
+        raw_task_prompt = (task.prompt or "").strip()
+        if not raw_task_prompt:
+            raw_task_prompt = "(empty task prompt)"
+
+        # The TITAN_UI long system prompts expect a PAGE BRIEF style input and
+        # are sensitive to OUTPUT_MODE for determining what JSON schema to emit.
+        # In raw mode, we keep generation "no pipeline" (no UI_SPEC) but still
+        # provide an explicit brief wrapper and force TSX_ONLY so the model
+        # always returns files[] for downstream build/render/gates.
+        if input_mode in ("page_brief", "both", "auto"):
+            user_prompt = (
+                "PAGE BRIEF\n\n"
+                f"{raw_task_prompt}\n\n"
+                "OUTPUT_MODE\n\n"
+                "* OUTPUT_MODE: TSX_ONLY\n\n"
+                "REQUIREMENTS\n\n"
+                "* Output must be STRICT: <think>...</think> then ONE JSON object.\n"
+                "* JSON MUST include top-level \"files\" with app/page.tsx.\n"
+                "* No markdown fences. No extra text after the final }.\n"
+            )
+        else:
+            user_prompt = (
+                f"{raw_task_prompt}\n\n"
+                "OUTPUT_MODE\n\n"
+                "* OUTPUT_MODE: TSX_ONLY\n"
+            )
+
+        messages = [
+            Message(role="system", content=system_prompt),
+            Message(role="user", content=user_prompt),
+        ]
+
+        log_info(
+            f"Generating RAW candidate {candidate_id} with {generator.model} "
+            f"(prompt {prompt_variant_id}, variant {variant_index}, temp {temperature:.2f})"
+        )
+
+        max_retries = 2
+        max_tokens = generator.max_tokens
+
+        retry_instruction = (
+            "CRITICAL FORMAT REMINDER:\n"
+            "- Output ONLY:\n"
+            "  1) One <think>...</think> block (<=120 words)\n"
+            "  2) One valid JSON object\n"
+            "- The JSON MUST include a top-level \"files\" array.\n"
+            "- \"files\" MUST include at least one entry with:\n"
+            "  - path: \"app/page.tsx\"\n"
+            "  - content: a string containing the FULL Next.js TSX code (no placeholders).\n"
+            "- No markdown/code fences.\n"
+            "- No extra text before <think> or after the final }.\n"
+        )
+
+        for attempt in range(max_retries + 1):
+            candidate.generator_temperature = temperature
+
+            response = await provider.complete(
+                messages=messages,
+                model=generator.model,
+                max_tokens=max_tokens,
+                temperature=temperature,
+            )
+
+            candidate.raw_generator_response = response.content
+            content = response.content or ""
+
+            if not content.strip():
+                if attempt < max_retries:
+                    log_warning(
+                        f"Candidate {candidate_id}: Empty response, retrying "
+                        f"(attempt {attempt + 1}/{max_retries + 1})"
+                    )
+                    max_tokens = int(max_tokens * 1.25)
+                    temperature = max(0.3, temperature - 0.1)
+                    continue
+                raise RuntimeError("Empty response content from model")
+
+            finish_reason = getattr(response, "finish_reason", None)
+            if finish_reason == "length":
+                if attempt < max_retries:
+                    log_warning(
+                        f"Candidate {candidate_id}: Response truncated at {max_tokens} tokens, "
+                        f"retrying with {int(max_tokens * 1.25)} (attempt {attempt + 1}/{max_retries + 1})"
+                    )
+                    max_tokens = int(max_tokens * 1.25)
+                    temperature = max(0.3, temperature - 0.1)
+                    # Keep retry context small and explicit (avoid growing message history).
+                    messages = messages[:2] + [Message(role="user", content=retry_instruction)]
+                    continue
+                raise RuntimeError(
+                    f"Model response truncated (finish_reason=length) at max_tokens={max_tokens}"
+                )
+
+            try:
+                output_data = extract_json_strict(content)
+                output = validate_uigen_output(output_data)
+            except Exception as parse_error:
+                salvaged = _salvage_uigen_output(content)
+                if salvaged is not None:
+                    output = validate_uigen_output(salvaged)
+                    log_warning(
+                        f"Candidate {candidate_id}: Salvaged non-JSON output into UIGenOutput"
+                    )
+                else:
+                    if attempt < max_retries:
+                        log_warning(
+                            f"Candidate {candidate_id}: Invalid JSON output ({parse_error}), retrying "
+                            f"(attempt {attempt + 1}/{max_retries + 1})"
+                        )
+                        max_tokens = int(max_tokens * 1.25)
+                        temperature = max(0.3, temperature - 0.1)
+                        messages = messages[:2] + [Message(role="user", content=retry_instruction)]
+                        continue
+                    raise
+
+            candidate.files = output.files
+            candidate.status = CandidateStatus.GENERATED
+            log_info(f"Candidate {candidate_id}: Generated {len(output.files)} files (RAW)")
+            break
+
+    except Exception as e:
+        log_error(f"Candidate {candidate_id}: Raw generation failed - {e}")
+        candidate.error = str(e)
+        candidate.status = CandidateStatus.DISCARDED
+
+    return candidate
+
+
+async def generate_all_candidates_raw(
+    task: Task,
+    config: Config,
+    public_only: bool = False,
+) -> AsyncIterator[Candidate]:
+    """Generate candidates directly from the task prompt (no UI_SPEC planning)."""
+    generators = config.ui_generators
+    if public_only:
+        generators = config.get_publishable_generators()
+
+    if not generators:
+        log_error("No UI generators configured")
+        return
+
+    prompt_variants = _load_uigen_prompt_variants(config)
+    if not prompt_variants:
+        log_error("No UIGEN prompt variants available")
+        return
+
+    tasks = []
+    for pv in prompt_variants:
+        for generator in generators:
+            for variant in range(generator.variants):
+                tasks.append(
+                    generate_candidate_raw(
+                        task,
+                        generator,
+                        variant,
+                        config,
+                        prompt_variant_id=pv["id"],
+                        system_prompt=pv["system_prompt"],
+                        input_mode=pv["input_mode"],
+                    )
+                )
+
+    concurrency = config.budget.concurrency_vertex
+    for i in range(0, len(tasks), concurrency):
+        batch = tasks[i : i + concurrency]
+        results = await asyncio.gather(*batch, return_exceptions=True)
+
+        for result in results:
+            if isinstance(result, Exception):
+                log_error(f"Raw candidate generation failed: {result}")
             elif isinstance(result, Candidate):
                 yield result

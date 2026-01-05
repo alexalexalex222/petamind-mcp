@@ -1,0 +1,113 @@
+# Smoke Test Config (Qwen3-Coder patcher, 2× concurrency) - Dec 30, 2025
+#
+# Purpose:
+# - Run a small end-to-end batch (10 tasks) with task-level concurrency=2
+# - Use Qwen3-Coder as the build-fixer ("patcher") on Vertex MaaS
+# - Record deterministic gates (axe + Lighthouse) and make pass/fail reasons inspectable
+#
+# Usage:
+#   .venv/bin/python -m titan_factory.cli run --max-tasks 10 --run-id smoke-qwen-2x-dec30 -c config/config-smoke-qwen-2x-dec30.yaml
+
+models:
+  planner:
+    provider: vertex
+    model: deepseek-ai/deepseek-v3.2-maas
+    publishable: true
+    max_tokens: 2000
+    temperature: 0.6
+
+  ui_generators:
+    - provider: vertex
+      model: moonshotai/kimi-k2-thinking-maas
+      publishable: true
+      variants: 1
+      max_tokens: 65000
+      temperature: 0.95
+    - provider: vertex
+      model: minimaxai/minimax-m2-maas
+      publishable: true
+      variants: 1
+      max_tokens: 65000
+      temperature: 0.95
+
+  patcher:
+    provider: vertex
+    model: qwen/qwen3-coder-480b-a35b-instruct-maas
+    publishable: true
+    max_tokens: 20000
+    temperature: 0.2
+
+  vision_judge:
+    provider: gemini
+    # Use ADC/Vertex so we spend GCP credits, not API-key billing.
+    # Prefer stable Gemini 3 Flash; judge.py falls back to preview if needed.
+    model: gemini-3.0-flash
+    publishable: false
+    max_tokens: 65000
+    temperature: 0.7
+    force_adc: true
+
+pipeline:
+  skip_judge: true
+  broken_vision_gate_enabled: true
+  broken_vision_gate_min_confidence: 0.85
+
+  creativity_refinement_enabled: true
+  creativity_min_section_score: 0.7
+  creativity_max_refinement_passes: 2
+
+  deterministic_gates_enabled: true
+  deterministic_gates_enforce: false
+
+  axe_gate_enabled: true
+  axe_fail_impacts: ["critical"]
+  axe_timeout_ms: 60000
+
+  lighthouse_gate_enabled: true
+  lighthouse_preset: desktop
+  lighthouse_timeout_ms: 240000
+
+  lighthouse_min_scores:
+    performance: 0.35
+    accessibility: 0.70
+    best_practices: 0.70
+    seo: 0.60
+
+  megamind_enabled: false
+  refinement_enabled: false
+  creative_director_mode: false
+
+  max_fix_rounds: 2
+  polish_loop_enabled: false
+  generate_edit_tasks: false
+
+  # Keep task universe small for smoke runs (max_tasks further limits processing)
+  tasks_per_niche: 7
+  total_niches: 2
+
+  model_timeout_ms: 150000
+  build_timeout_ms: 240000
+  render_timeout_ms: 120000
+
+budget:
+  task_concurrency: 2
+  concurrency_vertex: 6
+  concurrency_gemini: 1
+  concurrency_build: 2
+  concurrency_render: 2
+  requests_per_min_vertex: 60
+  max_total_tasks: null
+  stop_after_usd: null
+
+export:
+  holdout_niches: 0
+  validation_split: 0.0
+  holdout_niche_ids: []
+
+gcs:
+  bucket: null
+  prefix: titan-factory-outputs
+  upload_interval_tasks: 50
+
+vertex:
+  endpoint_template: "https://{region}-aiplatform.googleapis.com/v1/projects/{project}/locations/{region}/endpoints/openapi/chat/completions"

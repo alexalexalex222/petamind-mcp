@@ -22,6 +22,9 @@ class ModelConfig:
     max_tokens: int = 2000
     temperature: float = 0.7
     variants: int = 1
+    # Provider-specific overrides
+    # For GeminiProvider: force Vertex ADC even if GEMINI_API_KEY/GOOGLE_API_KEY is set.
+    force_adc: bool = False
 
 
 @dataclass
@@ -30,6 +33,33 @@ class PipelineConfig:
 
     # If true, skip vision scoring entirely and accept rendered (build-passed) candidates.
     skip_judge: bool = False
+    # If true, bypass UI_SPEC planning and have the UI generator(s) produce code
+    # directly from the task prompt. This is used for "no pipeline" baselines.
+    raw_generation_enabled: bool = False
+
+    # === STYLE ROUTING (first-class aesthetic constraints) ===
+    # When enabled, promptgen deterministically routes each niche to a style family/persona and
+    # injects a "STYLE ROUTING (HARD CONSTRAINTS — MUST FOLLOW EXACTLY)" block into the task prompt.
+    # The planner/generators should treat this as a hard constraint to avoid cross-vertical style monoculture.
+    style_routing_enabled: bool = False
+
+    # === STYLE GATES (cheap deterministic checks) ===
+    # Run static heuristics on generated code to detect obvious style-family drift (e.g. cyber/terminal leak).
+    # Default is observe-only; enforcement is opt-in.
+    style_gates_enabled: bool = False
+    style_gates_enforce: bool = False
+
+    # === MEGAMIND 3-PASS REASONING ===
+    # When enabled, uses 3 parallel sub-reasoners (bold/minimal/safe) to generate plans,
+    # then synthesizes them into a unified best-of-3 plan before UI generation.
+    megamind_enabled: bool = False
+    # When enabled, use Megamind v2 reasoners (STYLE_GUARDIAN + BOLD_LAYOUT + BOLD_CONVERSION)
+    # and a style-lock synthesizer to prevent cross-vertical style drift.
+    megamind_v2_enabled: bool = False
+
+    # === EVOL MUTATIONS (prompt diversification without style drift) ===
+    evol_enabled: bool = False
+    evol_passes: int = 2
 
     # === REFINEMENT LOOP CONFIG (ported from titan-ui-synth-pipeline) ===
     # Enable iterative refinement: if score < threshold, refine and re-score.
@@ -59,6 +89,52 @@ class PipelineConfig:
     # Minimum confidence required to consider the premium gate decision actionable.
     # For example, if premium=false but confidence < threshold, we avoid polishing to reduce churn.
     premium_vision_gate_min_confidence: float = 0.75
+
+    # === SECTION-LEVEL CREATIVITY REFINEMENT (skip_judge mode) ===
+    # When enabled, uses the vision model to score sections (hero/features/testimonials/etc.)
+    # for "distinctive vs generic". If mixed quality is detected, the pipeline applies a
+    # surgical code patch to improve ONLY the weak sections, re-renders, and re-evaluates.
+    creativity_refinement_enabled: bool = False
+    creativity_min_section_score: float = 0.7
+    creativity_max_refinement_passes: int = 2
+
+    # === WINNER SELECTION (non-skip_judge mode) ===
+    # Selection mode:
+    # - weighted: deterministic_passed first, then weighted score (judge + creativity)
+    # - creativity_first: deterministic_passed first, then creativity, then judge score
+    selection_mode: str = "weighted"
+
+    # Blend numeric vision score (0-10) with section creativity (0-1) to avoid
+    # selecting "safe" winners when a more distinctive candidate is close.
+    selection_judge_weight: float = 0.6
+    selection_creativity_weight: float = 0.4
+    # Scale section creativity to judge-score scale when computing weighted selection.
+    # Judge score is typically 0..10 while section creativity is 0..1.
+    selection_creativity_scale: float = 10.0
+
+    # === TEMPERATURE CAP (advanced experimentation) ===
+    # By default we cap UI generator temperatures at 1.0 for stability.
+    # Set > 1.0 to explore higher-entropy outputs (may reduce format compliance).
+    generator_temp_cap: float = 1.0
+
+    # === CREATIVITY GATE (north star) ===
+    # When enabled, prefer candidates that meet a minimum creativity threshold.
+    # This does not replace deterministic gates; it complements them:
+    # shippable is necessary; creativity is the north star.
+    creativity_gate_enabled: bool = False
+    creativity_gate_min_avg: float = 0.7
+    # Optional: require N "high" sections (score >= 0.7, confidence >= 0.5) to avoid
+    # punishing pages with a distinctive hero + mid-page moment but a more utilitarian FAQ/footer.
+    # When 0, this requirement is disabled.
+    creativity_gate_min_high_sections: int = 0
+    # If true, tasks with no candidate meeting the creativity gate will have no winner selected.
+    creativity_gate_enforce: bool = False
+
+    # === REFINEMENT SKIP POLICY (Fix F) ===
+    # Refinement tends to regress distinctive layouts toward generic patterns.
+    # Skip refinement when deterministic gates already pass AND creativity is high.
+    refinement_skip_for_high_creativity: bool = True
+    refinement_creativity_skip_threshold: float = 0.7
     vision_score_threshold: float = 8.0
     max_fix_rounds: int = 2
     polish_loop_enabled: bool = True
@@ -122,6 +198,36 @@ class PipelineConfig:
     model_timeout_ms: int = 120000
     build_timeout_ms: int = 240000
     render_timeout_ms: int = 90000
+    # Starting port for Next.js servers during rendering. Use distinct ranges per run
+    # when launching multiple pipelines in parallel to avoid port collisions.
+    render_port_start: int = 3000
+
+    # === DETERMINISTIC QUALITY GATES ===
+    # Run cheap, measurable validation BEFORE subjective vision judging.
+    # Intended to increase "shippable" rate and reduce wasted judge calls.
+    deterministic_gates_enabled: bool = False
+    # If true, failing deterministic gates will discard candidates (status=DISCARDED).
+    deterministic_gates_enforce: bool = False
+
+    # Accessibility (axe-core) gate
+    axe_gate_enabled: bool = True
+    # Fail only on these impacts (axe impact values: minor/moderate/serious/critical)
+    axe_fail_impacts: list[str] = field(default_factory=lambda: ["critical"])
+    axe_timeout_ms: int = 60000
+
+    # Lighthouse gate (performance/accessibility/best-practices/seo)
+    lighthouse_gate_enabled: bool = True
+    lighthouse_preset: str = "desktop"  # "desktop" or "mobile"
+    lighthouse_timeout_ms: int = 180000
+    # Category score thresholds (0.0-1.0). Keys: performance/accessibility/best_practices/seo
+    lighthouse_min_scores: dict[str, float] = field(
+        default_factory=lambda: {
+            "performance": 0.35,
+            "accessibility": 0.70,
+            "best_practices": 0.70,
+            "seo": 0.60,
+        }
+    )
 
 
 @dataclass
@@ -139,6 +245,9 @@ class BudgetConfig:
     concurrency_render: int = 1
     requests_per_min_vertex: int = 60
     requests_per_min_openrouter: int = 100
+    # Gemini (Vertex / Google) rate limiting is separate from Vertex MaaS models.
+    # Default conservatively to avoid 429s during vision scoring.
+    requests_per_min_gemini: int = 20
     max_total_tasks: int | None = None
     stop_after_usd: float | None = None
 
@@ -206,6 +315,11 @@ class Config:
     # Refiner models for iterative refinement loop (optional, defaults to patcher/planner)
     refine_reasoner: ModelConfig | None = None  # Plans refinement fixes based on judge feedback
     refine_coder: ModelConfig | None = None  # Applies targeted fixes
+    # Megamind per-reasoner model configs (optional; fallback to planner config)
+    megamind_bold: ModelConfig | None = None
+    megamind_minimal: ModelConfig | None = None
+    megamind_safe: ModelConfig | None = None
+    megamind_synthesizer: ModelConfig | None = None
 
     # Paths
     project_root: Path = field(default_factory=lambda: Path(__file__).parent.parent.parent)
@@ -256,6 +370,7 @@ def _parse_model_config(data: dict[str, Any]) -> ModelConfig:
         max_tokens=data.get("max_tokens", 2000),
         temperature=data.get("temperature", 0.7),
         variants=data.get("variants", 1),
+        force_adc=bool(data.get("force_adc", False)),
     )
 
 
@@ -289,12 +404,124 @@ def load_config(config_path: str | Path | None = None) -> Config:
     vertex = data.get("vertex", {})
     openrouter = data.get("openrouter", {})
 
+    selection_cfg = pipeline.get("selection", {})
+    if not isinstance(selection_cfg, dict):
+        selection_cfg = {}
+
+    creativity_gate_cfg = pipeline.get("creativity_gate", {})
+    if not isinstance(creativity_gate_cfg, dict):
+        creativity_gate_cfg = {}
+
+    refinement_cfg = pipeline.get("refinement", {})
+    if not isinstance(refinement_cfg, dict):
+        refinement_cfg = {}
+
+    selection_mode = str(selection_cfg.get("mode", pipeline.get("selection_mode", "weighted")) or "weighted").strip()
+
+    # Selection weights (Fix E). Support both nested and legacy flat keys.
+    try:
+        selection_judge_weight = float(
+            selection_cfg.get("judge_weight", pipeline.get("selection_judge_weight", 0.6))
+        )
+    except Exception:
+        selection_judge_weight = 0.6
+
+    try:
+        selection_creativity_weight = float(
+            selection_cfg.get(
+                "creativity_weight", pipeline.get("selection_creativity_weight", 0.4)
+            )
+        )
+    except Exception:
+        selection_creativity_weight = 0.4
+
+    try:
+        selection_creativity_scale = float(
+            selection_cfg.get(
+                "creativity_scale", pipeline.get("selection_creativity_scale", 10.0)
+            )
+        )
+    except Exception:
+        selection_creativity_scale = 10.0
+
+    try:
+        generator_temp_cap = float(pipeline.get("generator_temp_cap", 1.0) or 1.0)
+    except Exception:
+        generator_temp_cap = 1.0
+
+    creativity_gate_enabled = bool(
+        creativity_gate_cfg.get(
+            "enabled", pipeline.get("creativity_gate_enabled", False)
+        )
+    )
+    try:
+        creativity_gate_min_avg = float(
+            creativity_gate_cfg.get(
+                "min_avg", pipeline.get("creativity_gate_min_avg", 0.7)
+            )
+        )
+    except Exception:
+        creativity_gate_min_avg = 0.7
+    try:
+        creativity_gate_min_high_sections = int(
+            creativity_gate_cfg.get(
+                "min_high_sections",
+                pipeline.get("creativity_gate_min_high_sections", 0),
+            )
+            or 0
+        )
+    except Exception:
+        creativity_gate_min_high_sections = 0
+    creativity_gate_enforce = bool(
+        creativity_gate_cfg.get(
+            "enforce", pipeline.get("creativity_gate_enforce", False)
+        )
+    )
+
+    # Refinement skip policy (Fix F). Support both nested and legacy flat keys.
+    refinement_skip_for_high_creativity = bool(
+        refinement_cfg.get(
+            "skip_for_high_creativity",
+            pipeline.get("refinement_skip_for_high_creativity", True),
+        )
+    )
+    try:
+        refinement_creativity_skip_threshold = float(
+            refinement_cfg.get(
+                "creativity_skip_threshold",
+                pipeline.get("refinement_creativity_skip_threshold", 0.7),
+            )
+        )
+    except Exception:
+        refinement_creativity_skip_threshold = 0.7
+
     # Parse model configs
     planner = _parse_model_config(models.get("planner", {}))
     ui_generators = [_parse_model_config(g) for g in models.get("ui_generators", [])]
     patcher = _parse_model_config(models.get("patcher", {}))
     polisher = _parse_model_config(models.get("polisher", models.get("patcher", {})))
     vision_judge = _parse_model_config(models.get("vision_judge", {}))
+    # Megamind reasoner models (optional; fallback happens in megamind.py)
+    megamind_bold = (
+        _parse_model_config(models.get("megamind_bold"))
+        if models.get("megamind_bold")
+        else None
+    )
+    megamind_minimal = (
+        _parse_model_config(models.get("megamind_minimal"))
+        if models.get("megamind_minimal")
+        else None
+    )
+    megamind_safe = (
+        _parse_model_config(models.get("megamind_safe"))
+        if models.get("megamind_safe")
+        else None
+    )
+    megamind_synthesizer = (
+        _parse_model_config(models.get("megamind_synthesizer"))
+        if models.get("megamind_synthesizer")
+        else None
+    )
     # Refiner models (optional, fallback to patcher for refine_coder, planner for refine_reasoner)
     refine_reasoner = (
         _parse_model_config(models.get("refine_reasoner"))
@@ -309,6 +536,24 @@ def load_config(config_path: str | Path | None = None) -> Config:
 
     project_root = Path(__file__).parent.parent.parent
 
+    # Deterministic gate defaults (duplicated here so config parsing can merge user overrides
+    # without accidentally zeroing the defaults when the key is missing).
+    default_lighthouse_min_scores: dict[str, float] = {
+        "performance": 0.35,
+        "accessibility": 0.70,
+        "best_practices": 0.70,
+        "seo": 0.60,
+    }
+    lighthouse_min_scores = dict(default_lighthouse_min_scores)
+    lh_overrides = pipeline.get("lighthouse_min_scores")
+    if isinstance(lh_overrides, dict):
+        # Keep only scalar values that can be cast to float
+        for k, v in lh_overrides.items():
+            try:
+                lighthouse_min_scores[str(k)] = float(v)
+            except Exception:
+                continue
+
     return Config(
         planner=planner,
         ui_generators=ui_generators,
@@ -317,8 +562,21 @@ def load_config(config_path: str | Path | None = None) -> Config:
         vision_judge=vision_judge,
         refine_reasoner=refine_reasoner,
         refine_coder=refine_coder,
+        megamind_bold=megamind_bold,
+        megamind_minimal=megamind_minimal,
+        megamind_safe=megamind_safe,
+        megamind_synthesizer=megamind_synthesizer,
         pipeline=PipelineConfig(
             skip_judge=pipeline.get("skip_judge", False),
+            raw_generation_enabled=bool(pipeline.get("raw_generation_enabled", False)),
+            style_routing_enabled=bool(pipeline.get("style_routing_enabled", False)),
+            style_gates_enabled=bool(pipeline.get("style_gates_enabled", False)),
+            style_gates_enforce=bool(pipeline.get("style_gates_enforce", False)),
+            # Megamind 3-pass reasoning
+            megamind_enabled=pipeline.get("megamind_enabled", False),
+            megamind_v2_enabled=bool(pipeline.get("megamind_v2_enabled", False)),
+            evol_enabled=bool(pipeline.get("evol_enabled", False)),
+            evol_passes=int(pipeline.get("evol_passes", 2) or 2),
             # Refinement loop config
             refinement_enabled=pipeline.get("refinement_enabled", True),
             refine_pass2_threshold=float(pipeline.get("refine_pass2_threshold", 8.0)),
@@ -333,6 +591,24 @@ def load_config(config_path: str | Path | None = None) -> Config:
             premium_vision_gate_min_confidence=float(
                 pipeline.get("premium_vision_gate_min_confidence", 0.75) or 0.75
             ),
+            creativity_refinement_enabled=bool(pipeline.get("creativity_refinement_enabled", False)),
+            creativity_min_section_score=float(
+                pipeline.get("creativity_min_section_score", 0.7) or 0.7
+            ),
+            creativity_max_refinement_passes=int(
+                pipeline.get("creativity_max_refinement_passes", 2) or 2
+            ),
+            selection_mode=selection_mode,
+            selection_judge_weight=selection_judge_weight,
+            selection_creativity_weight=selection_creativity_weight,
+            selection_creativity_scale=selection_creativity_scale,
+            generator_temp_cap=generator_temp_cap,
+            creativity_gate_enabled=creativity_gate_enabled,
+            creativity_gate_min_avg=creativity_gate_min_avg,
+            creativity_gate_min_high_sections=creativity_gate_min_high_sections,
+            creativity_gate_enforce=creativity_gate_enforce,
+            refinement_skip_for_high_creativity=refinement_skip_for_high_creativity,
+            refinement_creativity_skip_threshold=refinement_creativity_skip_threshold,
             vision_score_threshold=pipeline.get("vision_score_threshold", 8.0),
             max_fix_rounds=pipeline.get("max_fix_rounds", 2),
             polish_loop_enabled=pipeline.get("polish_loop_enabled", True),
@@ -352,6 +628,17 @@ def load_config(config_path: str | Path | None = None) -> Config:
             model_timeout_ms=pipeline.get("model_timeout_ms", 120000),
             build_timeout_ms=pipeline.get("build_timeout_ms", 240000),
             render_timeout_ms=pipeline.get("render_timeout_ms", 90000),
+            render_port_start=int(pipeline.get("render_port_start", 3000) or 3000),
+            # Deterministic quality gates (axe + Lighthouse)
+            deterministic_gates_enabled=bool(pipeline.get("deterministic_gates_enabled", False)),
+            deterministic_gates_enforce=bool(pipeline.get("deterministic_gates_enforce", False)),
+            axe_gate_enabled=bool(pipeline.get("axe_gate_enabled", True)),
+            axe_fail_impacts=list(pipeline.get("axe_fail_impacts") or ["critical"]),
+            axe_timeout_ms=int(pipeline.get("axe_timeout_ms", 60000) or 60000),
+            lighthouse_gate_enabled=bool(pipeline.get("lighthouse_gate_enabled", True)),
+            lighthouse_preset=str(pipeline.get("lighthouse_preset", "desktop") or "desktop"),
+            lighthouse_timeout_ms=int(pipeline.get("lighthouse_timeout_ms", 180000) or 180000),
+            lighthouse_min_scores=lighthouse_min_scores,
         ),
         budget=BudgetConfig(
             task_concurrency=budget.get("task_concurrency", 1),
@@ -362,6 +649,7 @@ def load_config(config_path: str | Path | None = None) -> Config:
             concurrency_render=budget.get("concurrency_render", 1),
             requests_per_min_vertex=budget.get("requests_per_min_vertex", 60),
             requests_per_min_openrouter=budget.get("requests_per_min_openrouter", 100),
+            requests_per_min_gemini=budget.get("requests_per_min_gemini", 20),
             max_total_tasks=budget.get("max_total_tasks"),
             stop_after_usd=budget.get("stop_after_usd"),
         ),

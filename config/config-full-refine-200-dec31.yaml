@@ -1,0 +1,197 @@
+# Full Titan pipeline (200-task scale run, higher concurrency) — Dec 31, 2025
+#
+# Purpose:
+# - Run the COMPLETE pipeline end-to-end at larger scale:
+#   Megamind (3-pass) → UI gen → build+patch → render → deterministic gates →
+#   broken-vision gate → vision judge scoring → refinement loop → Fix E/F selection →
+#   exports + portal.
+#
+# Notes:
+# - No OpenRouter spend. All LLMs on Vertex MaaS. Gemini uses ADC/Vertex even if API keys exist.
+# - Concurrency tuned for throughput while staying stable locally.
+#
+# Run:
+#   .venv/bin/python -m titan_factory.cli run \
+#     --max-tasks 200 --run-id full-refine-200 \
+#     -c config/config-full-refine-200-dec31.yaml
+
+models:
+  planner:
+    provider: vertex
+    model: deepseek-ai/deepseek-v3.2-maas
+    publishable: true
+    max_tokens: 2000
+    temperature: 0.6
+
+  # 2 generators × 2 variants = 4 candidates per task
+  ui_generators:
+    - provider: vertex
+      model: moonshotai/kimi-k2-thinking-maas
+      publishable: true
+      variants: 2
+      max_tokens: 65000
+      temperature: 0.85
+    - provider: vertex
+      model: minimaxai/minimax-m2-maas
+      publishable: true
+      variants: 2
+      max_tokens: 65000
+      temperature: 0.85
+
+  # Build-fix patcher (Vertex MaaS)
+  patcher:
+    provider: vertex
+    model: qwen/qwen3-coder-480b-a35b-instruct-maas
+    publishable: true
+    max_tokens: 9000
+    temperature: 0.2
+
+  # Vision judge (multimodal). Force ADC/Vertex so we don't accidentally spend via API key billing.
+  vision_judge:
+    provider: gemini
+    model: gemini-3-flash
+    publishable: false
+    max_tokens: 1500
+    temperature: 0.0
+    force_adc: true
+
+  # Megamind per-reasoner models (used only when pipeline.megamind_enabled=true)
+  megamind_bold:
+    provider: vertex
+    model: moonshotai/kimi-k2-thinking-maas
+    publishable: true
+    max_tokens: 2500
+    temperature: 0.9
+
+  megamind_minimal:
+    provider: vertex
+    model: deepseek-ai/deepseek-v3.2-maas
+    publishable: true
+    max_tokens: 2500
+    temperature: 0.3
+
+  megamind_safe:
+    provider: vertex
+    model: deepseek-ai/deepseek-v3.2-maas
+    publishable: true
+    max_tokens: 2500
+    temperature: 0.5
+
+  megamind_synthesizer:
+    provider: vertex
+    model: deepseek-ai/deepseek-v3.2-maas
+    publishable: true
+    max_tokens: 3000
+    temperature: 0.4
+
+pipeline:
+  # Full scoring + selection mode (required to validate Fix E).
+  skip_judge: false
+  vision_score_threshold: 0.0
+
+  # Fix E: weighted winner selection (judge score + section creativity)
+  selection:
+    judge_weight: 0.6
+    creativity_weight: 0.4
+
+  # Fix F: skip refinement for high-creativity candidates that already pass deterministic gates.
+  refinement:
+    skip_for_high_creativity: true
+    creativity_skip_threshold: 0.7
+
+  # Task prompts (preserves creative risk workflow)
+  task_prompt_pack: mixed
+  generate_edit_tasks: false
+
+  # Increase prompt universe diversity (not max-tasks; this controls generation of prompts/tasks.jsonl)
+  tasks_per_niche: 10
+  total_niches: 100
+
+  # Stacked mega prompt for UIGEN (built-in rules + TITAN_UI long system prompt).
+  uigen_prompt_variants:
+    - id: stacked_all
+      input_mode: both
+      parts:
+        - source: builtin
+        - source: file
+          path: prompts/titan_ui_system_long.txt
+        - source: inline
+          text: |
+            GLOBAL OVERRIDES (APPLY EVEN IF OTHER PROMPTS CONFLICT):
+            - Output must be STRICT: <think>...</think> followed by ONE valid JSON object.
+            - No emojis in any text. If an icon is needed, use simple inline SVG (keep icons minimal).
+            - Follow the provided brand accent exactly; do not default to violet/purple.
+            - Follow the Creative risk dial; avoid boring/generic layouts; keep UX clear and build-safe.
+
+  # Deterministic gates (axe + Lighthouse)
+  deterministic_gates_enabled: true
+  deterministic_gates_enforce: false  # observe mode (keep throughput)
+
+  axe_gate_enabled: true
+  axe_fail_impacts: ["critical"]
+  axe_timeout_ms: 60000
+
+  lighthouse_gate_enabled: true
+  lighthouse_preset: desktop
+  lighthouse_timeout_ms: 240000
+
+  # Required shippable floor: 0 critical axe, LH a11y >= 0.80. (Perf/BP tracked in SQL.)
+  lighthouse_min_scores:
+    accessibility: 0.80
+    performance: 0.00
+    best_practices: 0.00
+    seo: 0.00
+
+  # Blank/broken page killer (runs in BOTH skip_judge and non-skip_judge after code patch)
+  broken_vision_gate_enabled: true
+  broken_vision_gate_min_confidence: 0.85
+
+  # Megamind + refinement loop
+  megamind_enabled: true
+  refinement_enabled: true
+  refine_pass2_threshold: 7.0
+  refine_pass3_threshold: 8.0
+  max_refine_passes: 2
+  creative_director_mode: false
+
+  # Keep extra expensive loops off at 200 scale.
+  polish_loop_enabled: false
+  creativity_refinement_enabled: false
+
+  max_fix_rounds: 2
+
+  # Timeouts (milliseconds)
+  model_timeout_ms: 150000
+  build_timeout_ms: 240000
+  render_timeout_ms: 120000
+
+budget:
+  # User request: 10 tasks in flight.
+  task_concurrency: 10
+
+  # Concurrency caps by provider/stage
+  # NOTE: Vertex can return 429 RESOURCE_EXHAUSTED if concurrency is too high.
+  # Keep this conservative; task_concurrency still allows overlap while requests queue safely.
+  concurrency_vertex: 10
+  concurrency_gemini: 2
+  concurrency_build: 3
+  concurrency_render: 2
+
+  # Throughput throttle
+  requests_per_min_vertex: 60
+
+  max_total_tasks: null
+  stop_after_usd: null
+
+export:
+  holdout_niches: 0
+  validation_split: 0.0
+  holdout_niche_ids: []
+
+gcs:
+  bucket: null
+  prefix: titan-factory-outputs
+  upload_interval_tasks: 50
+
+vertex:
+  endpoint_template: "https://{region}-aiplatform.googleapis.com/v1/projects/{project}/locations/{region}/endpoints/openapi/chat/completions"

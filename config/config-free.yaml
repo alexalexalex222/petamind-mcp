@@ -16,13 +16,13 @@ models:
       model: mistralai/devstral-2512:free
       publishable: true
       variants: 2
-      max_tokens: 12000
+      max_tokens: 65000
       temperature: 0.8
     - provider: openrouter
       model: qwen/qwen3-32b:free
       publishable: true
       variants: 2
-      max_tokens: 12000
+      max_tokens: 65000
       temperature: 0.8
 
   # Patcher - free
@@ -36,7 +36,7 @@ models:
   # Vision Judge - Gemini API (free tier)
   vision_judge:
     provider: gemini
-    model: gemini-2.0-flash
+    model: gemini-3-flash
     publishable: false
     max_tokens: 4000
     temperature: 0.1
