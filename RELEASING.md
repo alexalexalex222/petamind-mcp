@@ -59,6 +59,14 @@ export TWINE_PASSWORD="pypi-REDACTED"
 python -m twine upload dist/*
 ```
 
+Or use the helper script:
+
+```bash
+export TWINE_USERNAME="__token__"
+export TWINE_PASSWORD="pypi-REDACTED"
+./scripts/release_pypi.sh
+```
+
 ## 4) GitHub tagging
 
 After PyPI upload succeeds:
@@ -77,4 +85,3 @@ GitHub may reject the push. In that case:
 
 - Re-auth with workflow scope, or
 - Add workflows via the GitHub web UI.
-
