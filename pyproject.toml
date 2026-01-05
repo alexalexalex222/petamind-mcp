@@ -21,6 +21,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
 ]
+keywords = ["mcp", "claude-code", "agentic", "automation", "code-review", "patch", "vision"]
 dependencies = [
     "typer>=0.9.0",
     "rich>=13.0.0",
@@ -38,10 +39,17 @@ dependencies = [
     "google-cloud-storage>=2.13.0",
 ]
 
+[project.urls]
+Homepage = "https://github.com/alexalexalex222/petamind-mcp"
+Repository = "https://github.com/alexalexalex222/petamind-mcp"
+Issues = "https://github.com/alexalexalex222/petamind-mcp/issues"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=7.4.0",
     "pytest-asyncio>=0.21.0",
+    "build>=1.2.0",
+    "twine>=5.0.0",
     "mypy>=1.7.0",
     "ruff>=0.1.0",
     "types-pyyaml",
