@@ -12,7 +12,6 @@ from titan_factory.config import Config
 from titan_factory.schema import Candidate, CandidateStatus
 from titan_factory.utils import ensure_dir, log_error, log_info, log_warning, run_command
 
-
 # Allowlist of file paths models are permitted to generate
 # Prevents path traversal attacks and limits scope of generated code
 ALLOWED_PATH_PATTERNS = [

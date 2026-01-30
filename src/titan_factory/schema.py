@@ -1,10 +1,9 @@
 """Pydantic models and JSON Schema definitions for TITAN Factory."""
 
 from enum import Enum
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import BaseModel, Field
-
 
 # === Enums ===
 

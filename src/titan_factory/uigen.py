@@ -1,19 +1,16 @@
 """UI Generator module - generates code from UI_SPEC."""
 
 import asyncio
-import os
 import re
+from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import AsyncIterator
 
 from titan_factory.config import Config, ModelConfig
 from titan_factory.providers import Message, ProviderFactory
 from titan_factory.schema import (
     Candidate,
     CandidateStatus,
-    GeneratedFile,
     Task,
-    UIGenOutput,
     UISpec,
     validate_uigen_output,
 )

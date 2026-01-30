@@ -8,9 +8,7 @@ from titan_factory.providers import Message, ProviderFactory
 from titan_factory.schema import (
     Candidate,
     GeneratedFile,
-    PatchOutput,
     TeacherModel,
-    UISpec,
 )
 from titan_factory.utils import (
     extract_json_strict,

@@ -4,8 +4,8 @@ import hashlib
 import json
 import os
 import random
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator
 
 from titan_factory.config import Config
 from titan_factory.schema import NicheDefinition, PageType, Task
@@ -487,7 +487,7 @@ def generate_task_prompt_extended(
         "Denver",
         "Seattle",
     ]
-    city = rng.choice(cities)
+    rng.choice(cities)
 
     vibes = [
         "ultra-clean with generous whitespace",

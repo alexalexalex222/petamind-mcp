@@ -324,7 +324,7 @@ Apply ONLY the listed changes. Return the updated files.
             result = extract_json_strict(response.content)
             break  # Success
 
-        except ValueError as e:
+        except ValueError:
             # JSON extraction failed - might be truncated without finish_reason
             if attempt < max_retries - 1:
                 new_tokens = int(current_max_tokens * 1.25)
@@ -586,7 +586,7 @@ Maintain the design's creative identity.
             result = extract_json_strict(response.content)
             break  # Success
 
-        except ValueError as e:
+        except ValueError:
             # JSON extraction failed - might be truncated without finish_reason
             if attempt < max_retries - 1:
                 new_tokens = int(current_max_tokens * 1.25)

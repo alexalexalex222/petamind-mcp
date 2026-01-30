@@ -1,5 +1,6 @@
-import anyio
 from pathlib import Path
+
+import anyio
 
 from titan_factory import mcp_code_server
 

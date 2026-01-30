@@ -12,8 +12,8 @@ The router is intentionally deterministic: no model calls, no randomness beyond 
 
 from __future__ import annotations
 
-import json
 import hashlib
+import json
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path

@@ -1,40 +1,17 @@
-.PHONY: setup smoke run_public run_private export test clean
-
-# Default run ID for exports
-RUN_ID ?= latest
+.PHONY: setup install test lint format typecheck clean smoke run_public run_private
 
 setup:
-	python3 -m venv .venv
-	. .venv/bin/activate && pip install -e ".[dev]"
-	. .venv/bin/activate && playwright install chromium
-	@echo "Setup complete. Activate with: source .venv/bin/activate"
+	./scripts/setup.sh
 
-smoke:
-	@echo "Running smoke test (3 tasks)..."
-	titan-factory run --max-tasks 3 --run-id smoke-test
-
-run_public:
-	@echo "Running full pipeline (public models only)..."
-	titan-factory run --public-only
-
-run_private:
-	@echo "Running full pipeline (all models)..."
-	titan-factory run
-
-resume:
-	@echo "Resuming run $(RUN_ID)..."
-	titan-factory run --resume $(RUN_ID)
-
-export:
-	@echo "Exporting training data for run $(RUN_ID)..."
-	titan-factory export --run-id $(RUN_ID)
+install:
+	pip install -e .[dev]
+	playwright install chromium
 
 test:
 	pytest tests/ -v
 
 lint:
 	ruff check src/ tests/
-	ruff format --check src/ tests/
 
 format:
 	ruff format src/ tests/
@@ -50,10 +27,24 @@ clean:
 	rm -rf src/*.egg-info
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 
-# Generate niches and tasks only (useful for inspection)
-generate-prompts:
-	titan-factory generate-prompts
+smoke:
+	titan-factory run --max-tasks 3 --config config/config-smoke-qwen-2x-dec30.yaml
 
-# Show task counts
-stats:
-	titan-factory stats --run-id $(RUN_ID)
+run_public:
+	titan-factory run --public-only
+
+run_private:
+	titan-factory run
+
+help:
+	@echo "Available commands:"
+	@echo "  make setup        - Run setup script"
+	@echo "  make install      - Install dependencies and playwright browsers"
+	@echo "  make test         - Run unit tests"
+	@echo "  make lint         - Run ruff linter"
+	@echo "  make format       - Run ruff formatter and auto-fix"
+	@echo "  make typecheck    - Run mypy type checker"
+	@echo "  make clean        - Remove build artifacts and caches"
+	@echo "  make smoke        - Run a small smoke test"
+	@echo "  make run_public   - Run pipeline for public models"
+	@echo "  make run_private  - Run pipeline for all models"

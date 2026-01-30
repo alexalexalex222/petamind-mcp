@@ -2,7 +2,6 @@
 
 import asyncio
 import re
-from pathlib import Path
 
 from titan_factory.config import Config
 from titan_factory.providers import Message, ProviderFactory
@@ -88,7 +87,7 @@ async def _complete_with_vision_fallback(
     images: list[bytes],
     max_tokens: int,
     temperature: float,
-) -> "CompletionResponse":
+) -> CompletionResponse:
     """Call vision completion with safe model fallbacks when a model ID is not available.
 
     This prevents a config typo (or auth-mode mismatch) from disabling broken-gate safety.
@@ -859,7 +858,7 @@ Returns:
 
     primary_model = config.vision_judge.model
 
-    async def _call(model: str, *, retry_json_only: bool) -> "CompletionResponse":
+    async def _call(model: str, *, retry_json_only: bool) -> CompletionResponse:
         call_messages = messages
         if retry_json_only:
             call_messages = messages + [
@@ -890,7 +889,7 @@ Returns:
     except asyncio.CancelledError as e:
         log_warning(f"Candidate {candidate.id}: Section creativity eval cancelled (skipping): {e}")
         return None
-    except Exception as e:
+    except Exception:
         # Retry once: ask for strict JSON.
         try:
             resp2 = await _call(primary_model, retry_json_only=True)

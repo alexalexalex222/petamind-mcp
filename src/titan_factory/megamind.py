@@ -22,7 +22,6 @@ Inspired by:
 """
 
 import asyncio
-import json
 from typing import NamedTuple
 
 from titan_factory.config import Config, ModelConfig

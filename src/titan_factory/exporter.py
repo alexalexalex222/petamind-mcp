@@ -1,6 +1,5 @@
 """Exporter module - exports training data to JSONL format."""
 
-import hashlib
 import json
 import random
 import re
@@ -9,7 +8,7 @@ from pathlib import Path
 import aiosqlite
 
 from titan_factory.config import Config
-from titan_factory.schema import Candidate, GeneratedFile, JudgeScore, TeacherModel, UISpec
+from titan_factory.schema import GeneratedFile, UISpec
 from titan_factory.utils import ensure_dir, log_info, log_success
 
 # === Chat Template ===

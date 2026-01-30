@@ -1,15 +1,12 @@
 """Command-line interface for TITAN Factory."""
 
 import asyncio
-import json
 import os
 import socketserver
-from pathlib import Path
-from typing import Optional
-
+from datetime import datetime
 from functools import partial
 from http.server import SimpleHTTPRequestHandler
-from datetime import datetime
+from pathlib import Path
 
 import typer
 from rich.console import Console
@@ -19,8 +16,8 @@ from titan_factory.config import load_config
 from titan_factory.exporter import export_run, export_stats
 from titan_factory.gallery import build_gallery, build_portal
 from titan_factory.orchestrator import backfill_no_winner, run_pipeline
-from titan_factory.promptgen import generate_niches, generate_tasks, save_niches, save_tasks
-from titan_factory.utils import log_error, log_info, log_success, log_warning
+from titan_factory.promptgen import generate_niches, save_niches, save_tasks
+from titan_factory.utils import log_error, log_success, log_warning
 
 app = typer.Typer(
     name="titan-factory",
@@ -36,22 +33,22 @@ def run(
         "--public-only",
         help="Only use publishable models",
     ),
-    max_tasks: Optional[int] = typer.Option(
+    max_tasks: int | None = typer.Option(
         None,
         "--max-tasks",
         help="Maximum number of tasks to process",
     ),
-    run_id: Optional[str] = typer.Option(
+    run_id: str | None = typer.Option(
         None,
         "--run-id",
         help="Custom run ID",
     ),
-    resume: Optional[str] = typer.Option(
+    resume: str | None = typer.Option(
         None,
         "--resume",
         help="Resume from a previous run ID",
     ),
-    config_path: Optional[str] = typer.Option(
+    config_path: str | None = typer.Option(
         None,
         "--config",
         "-c",
@@ -181,7 +178,7 @@ def serve(
         "--include-edits",
         help="Include edit tasks in the portal",
     ),
-    config_path: Optional[str] = typer.Option(
+    config_path: str | None = typer.Option(
         None,
         "--config",
         "-c",
@@ -246,7 +243,7 @@ def serve_out(
         "--bind",
         help="Bind address (default: 127.0.0.1)",
     ),
-    config_path: Optional[str] = typer.Option(
+    config_path: str | None = typer.Option(
         None,
         "--config",
         "-c",
@@ -429,12 +426,12 @@ def export(
         "--run-id",
         help="Run ID to export",
     ),
-    min_score: Optional[float] = typer.Option(
+    min_score: float | None = typer.Option(
         None,
         "--min-score",
         help="Only export winners with score >= this value (e.g. 9.0)",
     ),
-    config_path: Optional[str] = typer.Option(
+    config_path: str | None = typer.Option(
         None,
         "--config",
         "-c",
@@ -465,7 +462,7 @@ def backfill(
         "--run-id",
         help="Run ID to backfill no_winner tasks",
     ),
-    config_path: Optional[str] = typer.Option(
+    config_path: str | None = typer.Option(
         None,
         "--config",
         "-c",
@@ -489,12 +486,12 @@ def gallery(
         "--run-id",
         help="Run ID to generate a screenshot gallery for",
     ),
-    min_score: Optional[float] = typer.Option(
+    min_score: float | None = typer.Option(
         None,
         "--min-score",
         help="Minimum winner score to include in the gallery (e.g. 9.0)",
     ),
-    config_path: Optional[str] = typer.Option(
+    config_path: str | None = typer.Option(
         None,
         "--config",
         "-c",
@@ -531,7 +528,7 @@ def portal(
         "--include-edits",
         help="Include edit tasks in the portal",
     ),
-    config_path: Optional[str] = typer.Option(
+    config_path: str | None = typer.Option(
         None,
         "--config",
         "-c",
@@ -563,7 +560,7 @@ def stats(
         "--run-id",
         help="Run ID to get stats for",
     ),
-    config_path: Optional[str] = typer.Option(
+    config_path: str | None = typer.Option(
         None,
         "--config",
         "-c",
@@ -619,7 +616,7 @@ def stats(
 
 @app.command("generate-prompts")
 def generate_prompts(
-    config_path: Optional[str] = typer.Option(
+    config_path: str | None = typer.Option(
         None,
         "--config",
         "-c",
@@ -668,7 +665,7 @@ def list_niches() -> None:
 
 @app.command("validate-config")
 def validate_config(
-    config_path: Optional[str] = typer.Option(
+    config_path: str | None = typer.Option(
         None,
         "--config",
         "-c",

@@ -20,7 +20,6 @@ from dataclasses import dataclass
 
 from titan_factory.schema import GeneratedFile, Task
 
-
 _RE_CLASSNAME_DOUBLE = re.compile(r'className\s*=\s*"([^"]+)"')
 _RE_CLASSNAME_SINGLE = re.compile(r"className\s*=\s*'([^']+)'")
 

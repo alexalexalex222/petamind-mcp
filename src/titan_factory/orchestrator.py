@@ -3,12 +3,10 @@
 import asyncio
 import hashlib
 import json
-import sqlite3
 import traceback
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Callable
 
 import aiosqlite
 
@@ -20,9 +18,12 @@ from titan_factory.judge import (
     get_creative_director_feedback,
     score_all_candidates,
 )
-from titan_factory.patcher import patch_candidate, polish_candidate, refine_candidate_section_creativity
+from titan_factory.patcher import (
+    patch_candidate,
+    polish_candidate,
+    refine_candidate_section_creativity,
+)
 from titan_factory.planner import generate_ui_spec
-from titan_factory.refiner import refine_candidate, refine_candidate_creative_director
 from titan_factory.promptgen import (
     generate_task_prompt,
     load_tasks,
@@ -30,6 +31,7 @@ from titan_factory.promptgen import (
     save_tasks,
     stable_hash,
 )
+from titan_factory.refiner import refine_candidate, refine_candidate_creative_director
 from titan_factory.renderer import render_all_candidates, render_candidate
 from titan_factory.schema import (
     Candidate,

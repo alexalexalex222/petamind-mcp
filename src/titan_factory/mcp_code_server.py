@@ -48,7 +48,6 @@ from titan_factory.utils import (
     run_command,
 )
 
-
 _THIS_REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -1820,7 +1819,6 @@ async def titan_code_solve(
         raise ValueError("vision_mode='on' requires preview_command + preview_url")
 
     vision_kind: Literal["ui", "diff"] = "ui" if preview_enabled else "diff"
-    vision_enabled = True  # mandatory
 
     section_creativity_enabled = section_creativity_mode == "on" or (
         section_creativity_mode == "auto" and preview_enabled
@@ -2800,7 +2798,6 @@ async def _titan_code_eval_patch_impl(
         raise ValueError("vision_mode='on' requires preview_command + preview_url")
 
     vision_kind: Literal["ui", "diff"] = "ui" if preview_enabled else "diff"
-    vision_enabled = True  # mandatory
 
     port_start_base = int(os.getenv("TITAN_MCP_PORT_START", "3000"))
     worktree_lock = asyncio.Lock()

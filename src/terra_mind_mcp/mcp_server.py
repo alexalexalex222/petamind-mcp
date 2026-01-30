@@ -5,8 +5,6 @@ Public name is now **Petamind MCP**. Prefer `petamind_mcp.mcp_server`.
 
 from __future__ import annotations
 
-import os
-
 
 def main() -> None:
     from petamind_mcp.mcp_server import main as _main
