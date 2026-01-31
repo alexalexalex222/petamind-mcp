@@ -1262,6 +1262,59 @@ class PipelineOrchestrator:
                     # Refresh premium gate label after polish (best-effort)
                     updated_list = await assess_premium_candidates([updated_candidate], self.config)
                     updated_candidate = updated_list[0]
+
+                    # Revert if vision quality regressed (score or confidence drop)
+                    # We accept a polished candidate ONLY if:
+                    # 1. It is still premium (or better)
+                    # 2. Confidence hasn't dropped significantly
+                    # 3. Vision score (if available) hasn't dropped
+                    
+                    # If we have numeric scores (from a real judge, not just premium gate), check them.
+                    # Note: We need to score the updated candidate first if we want numeric comparison.
+                    if not self.config.pipeline.skip_judge or self.config.vision_judge.model:
+                         try:
+                             from titan_factory.judge import score_candidate
+                             # Best-effort scoring for regression check
+                             new_score = await score_candidate(updated_candidate, self.config)
+                             updated_candidate.score = new_score.score
+                             updated_candidate.score_details = new_score
+                             
+                             old_score_val = float(candidate.score or 0.0)
+                             new_score_val = float(updated_candidate.score or 0.0)
+                             
+                             # Allow tiny fluctuation (0.5), but revert on significant drop
+                             if new_score_val < (new_score_val - 0.5):
+                                 log_warning(
+                                     f"Task {task.id}: Polish regression (score {old_score_val:.1f} -> {new_score_val:.1f}); reverting"
+                                 )
+                                 candidates[idx] = original
+                                 await self.manifest.save_candidate(original)
+                                 continue
+                         except Exception as e:
+                             log_warning(f"Task {task.id}: Failed to score polished candidate: {e}")
+
+                    # Fallback to premium gate confidence check
+                    orig_pg = getattr(original, "premium_gate", None)
+                    new_pg = getattr(updated_candidate, "premium_gate", None)
+                    
+                    if orig_pg and new_pg:
+                        orig_conf = float(getattr(orig_pg, "confidence", 0.0) or 0.0)
+                        new_conf = float(getattr(new_pg, "confidence", 0.0) or 0.0)
+                        
+                        # If it lost "premium" status, revert
+                        if orig_pg.premium and not new_pg.premium:
+                             log_warning(f"Task {task.id}: Polish lost premium status; reverting")
+                             candidates[idx] = original
+                             await self.manifest.save_candidate(original)
+                             continue
+                             
+                        # If confidence dropped significantly (> 0.15), revert
+                        if new_conf < (orig_conf - 0.15):
+                             log_warning(f"Task {task.id}: Polish confidence dropped ({orig_conf:.2f} -> {new_conf:.2f}); reverting")
+                             candidates[idx] = original
+                             await self.manifest.save_candidate(original)
+                             continue
+
                     candidates[idx] = updated_candidate
                     await self.manifest.save_candidate(updated_candidate)
 
